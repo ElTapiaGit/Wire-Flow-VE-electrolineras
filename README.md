@@ -41,9 +41,9 @@
 
 ## 📸 Capturas de Pantalla
 
-| Dashboard Principal | Calculadora Técnica | Checklist de Certificación | Acta PDF Generada |
+| Referencia Practica | Calculadora Técnica | Dashboard Principal | Modulo Comparativo |
 | :---: | :---: | :---: | :---: |
-| <img src="assets/images/screenshot1.png" width="200"/> | <img src="assets/images/screenshot2.jpg" width="200"/> | <img src="assets/images/screenshot3.jpg" width="200"/> | <img src="assets/images/screenshot4.jpg" width="200"/> |
+| <img src="assets/screenshots/screenshot1.png" width="200"/> | <img src="assets/screenshots/screenshot4.jpg" width="200"/> | <img src="assets/screenshots/screenshot2.jpg" width="200"/> | <img src="assets/screenshots/screenshot3.jpg" width="200"/> |
 
 ---
 
