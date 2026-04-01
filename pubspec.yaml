@@ -1,0 +1,43 @@
+name: wireflow_ve
+description: "Herramienta de dimensionamiento y certificación para instalaciones de electrolineras."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  drift: ^2.31.0
+  path_provider: ^2.1.5
+  path: ^1.9.1
+  sqlite3_flutter_libs: ^0.5.42
+  flutter_riverpod: ^2.6.1
+  provider: ^6.1.5+1
+  flutter_launcher_icons: ^0.14.4
+  url_launcher: ^6.3.2
+  pdf: ^3.11.3
+  printing: ^5.14.3
+  intl: ^0.20.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  build_runner: ^2.13.1
+  drift_dev: ^2.31.0
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true  
+  image_path: "assets/images/logo-wireflowve.png" 
+  min_sdk_android: 21 
+  adaptive_icon_background: "#102216" 
+  adaptive_icon_foreground: "assets/images/logo-wireflowve.png"
