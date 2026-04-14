@@ -1,31 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/checklist_provider.dart';
+import '../../../core/services/pdf_service.dart';
 
 class ChecklistScreen extends StatelessWidget {
   const ChecklistScreen({super.key});
 
-  void _generarPDF(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            Icon(Icons.construction, color: Colors.white),
-            SizedBox(width: 8),
-            Expanded(child: Text('Generación de PDF en desarrollo...')),
-          ],
-        ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
+  void _generarPDF(BuildContext context, ChecklistProvider provider) async {
+    // Si no tenemos un nombre de cliente temporal (porque es un checklist vacío nuevo),
+    // le asignamos valores genéricos solo para que el PDF no explote al generar la vista previa.
+    final registroTemporal = provider.crearRegistroTemporal(
+      nombreCliente: provider.nombreClienteGuardado.isNotEmpty ? provider.nombreClienteGuardado : 'Previsualización Borrador',
+      ciNitCliente: provider.ciNitClienteGuardado,
+      direccion: provider.direccionGuardada.isNotEmpty ? provider.direccionGuardada : 'Dirección pendiente',
     );
+
+    // Llamamos al servicio para mostrar el PDF
+    await PdfService.generarCertificado(registroTemporal);
   }
 
   void _mostrarDialogoGuardar(BuildContext context, ChecklistProvider provider) {
-    final nombreController = TextEditingController();
-    final ciController = TextEditingController();
-    final direccionController = TextEditingController();
+    // LOGICA DE EDICION: Si ya tenemos un ID (es un borrador cargado), pre-llenamos los campos
+    final isEditing = provider.currentInstalacionId != null;
+
+    final nombreController = TextEditingController(text: isEditing ? provider.nombreClienteGuardado : '');
+    final ciController = TextEditingController(text: isEditing ? provider.ciNitClienteGuardado : '');
+    final direccionController = TextEditingController(text: isEditing ? provider.direccionGuardada : '');
+    
     final isReady = provider.isChecklistComplete;
 
     showDialog(
@@ -40,7 +41,7 @@ class ChecklistScreen extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  isReady ? 'Certificar Entrega' : 'Guardar Registro', 
+                  isReady ? 'Certificar Entrega' : (isEditing ? 'Actualizar Borrador' : 'Guardar Registro'), 
                   style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 18, fontWeight: FontWeight.bold, color: isReady ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.primary)
                 ),
               ),
@@ -99,18 +100,18 @@ class ChecklistScreen extends StatelessWidget {
             ElevatedButton(
               onPressed: provider.isSaving ? null : () async {
                 if (nombreController.text.isEmpty || direccionController.text.isEmpty) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  SnackBar(content: Text('Nombre y Dirección son obligatorios para el certificado.'), backgroundColor: Theme.of(context).colorScheme.error)
-                );
-                return;
-              }
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    SnackBar(content: Text('Nombre y Dirección son obligatorios para el certificado.'), backgroundColor: Theme.of(context).colorScheme.error)
+                  );
+                  return;
+                }
 
-                // logica del Provider
+                // logica del guarada Provider
                 await provider.guardarRegistroFinal(
-                nombreCliente: nombreController.text.trim(), 
-                ciNitCliente: ciController.text.trim(),
-                direccion: direccionController.text.trim(),
-              );
+                  nombreCliente: nombreController.text.trim(), 
+                  ciNitCliente: ciController.text.trim(),
+                  direccion: direccionController.text.trim(),
+                );
 
                 if (dialogContext.mounted) {
                   Navigator.pop(dialogContext); 
@@ -204,7 +205,7 @@ class ChecklistScreen extends StatelessWidget {
           width: double.infinity,
           height: 48,
           child: OutlinedButton.icon(
-            onPressed: () => _generarPDF(context),
+            onPressed: () => _generarPDF(context, provider),
             style: OutlinedButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.primary,
               side: BorderSide(color: Theme.of(context).colorScheme.primary),

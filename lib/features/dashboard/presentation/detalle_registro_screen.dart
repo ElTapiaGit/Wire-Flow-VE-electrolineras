@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart'; 
 import '../../../core/database/app_database.dart'; 
 import '../../../core/services/pdf_service.dart'; 
+import 'package:provider/provider.dart';
+import '../../checklist/providers/checklist_provider.dart';
+import '../../dashboard/providers/dashboard_provider.dart';
 
 class PantallaDetalleRegistro extends StatelessWidget {
   final CertificacionesChecklistData registro;
@@ -10,7 +13,14 @@ class PantallaDetalleRegistro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isCertificado = registro.isCompletado;
+    // REACTIVIDAD: Escuchamos el historial global
+    final dashboardProvider = context.watch<DashboardProvider>();
+    // Buscamos la version mas reciente de este registro en específico
+    final registroActualizado = dashboardProvider.historial.firstWhere(
+      (r) => r.id == registro.id,
+      orElse: () => registro, // Si por alguna razón no lo encuentra, usa el viejo
+    );
+    final bool isCertificado = registroActualizado.isCompletado;
     final fechaFormat = DateFormat('dd MMM yyyy - HH:mm');
 
     return Scaffold(
@@ -95,31 +105,94 @@ class PantallaDetalleRegistro extends StatelessWidget {
             
             _buildDataRow(context, 'Tensión Medida', registro.tensionMedidaV != null ? '${registro.tensionMedidaV} V' : 'No registrada', Icons.electrical_services),
             const Divider(height: 1),
-            _buildDataRow(context, 'Puesta a Tierra', registro.resistenciaTierraOhms != null ? '${registro.resistenciaTierraOhms} Ω' : 'No registrada', Icons.youtube_searched_for_sharp),
+            _buildDataRow(context, 'Puesta a Tierra', registro.resistenciaTierraOhms != null ? '${registro.resistenciaTierraOhms} Ω' : 'No registrada', Icons.sensors),
             const Divider(height: 1),
             _buildDataRow(context, 'Pruebas Operativas', registro.funEncendido && registro.funCorriente ? 'Aprobadas' : 'Incompletas', Icons.check_circle_outline),
           ],
         ),
       ),
       
-      // BOTON FLOTANTE PARA GENERAR EL PDF
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24.0),
-        child: SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: FloatingActionButton.extended(
-            onPressed: () async {
-              await PdfService.generarCertificado(registro);
-            },
-            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-            foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
-            elevation: 4,
-            icon: const Icon(Icons.picture_as_pdf),
-            label: const Text('GENERAR ACTA EN PDF', style: TextStyle(fontFamily: 'Space Grotesk', fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+      // BOTONES FLOTANTE PARA GENERAR EL PDF
+      bottomNavigationBar: SafeArea(
+        child: Container(
+          padding: const EdgeInsets.all(24.0),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            border: Border(top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3))),
           ),
-        ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Si ES BORRADOR: Botón principal de Editar
+              if (!isCertificado) ...[
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      context.read<ChecklistProvider>().cargadorBorrador(registroActualizado);
+                      
+                      await Navigator.pushNamed(context, '/checklist');
+                      // obligamos al historial a recargar la base de datos
+                      if (context.mounted) {
+                        context.read<DashboardProvider>().cargarHistorial();
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      elevation: 0,
+                    ),
+                    icon: const Icon(Icons.edit_document),
+                    label: const Text('CONTINUAR EDITANDO', style: TextStyle(fontFamily: 'Space Grotesk', fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // boton de pdf
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: isCertificado 
+                  ? ElevatedButton.icon(
+                      onPressed: () async => await PdfService.generarCertificado(registro),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.secondary,
+                        foregroundColor: Theme.of(context).colorScheme.surface, // Texto oscuro o claro según el tema
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.picture_as_pdf),
+                      label: const Text('GENERAR ACTA EN PDF', style: TextStyle(fontFamily: 'Space Grotesk', fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+                    )
+                  : OutlinedButton.icon(
+                      onPressed: () async => await PdfService.generarCertificado(registro),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.primary,
+                        side: BorderSide(color: Theme.of(context).colorScheme.primary),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.picture_as_pdf),
+                      label: const Text('PREVISUALIZAR BORRADOR', style: TextStyle(fontFamily: 'Space Grotesk', fontWeight: FontWeight.bold)),
+                    ),
+              ),
+
+              // candado de seguridad
+              if (isCertificado) ...[
+                const SizedBox(height: 16,),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.lock_outline, size: 14, color: Theme.of(context).colorScheme.outline),
+                    const SizedBox(width: 6),
+                    Text('Registro certificado. No se puede modificar.', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.outline)),
+                  ],
+                )
+              ]
+            ],
+          ),
+        )
       ),
     );
   }

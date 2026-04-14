@@ -6,6 +6,7 @@ class ChecklistProvider extends ChangeNotifier {
   final AppDatabase _db;
 
   // ESTADO DEL FORMULARIO
+  int? currentInstalacionId; //para edit
   // INSPECCION VISUAL
   bool visFijacion = false;
   bool visCables = false;
@@ -33,6 +34,11 @@ class ChecklistProvider extends ChangeNotifier {
   // Estado de carga al guardar
   bool isSaving = false;
 
+  // --- VARIABLES DE MEMORIA DE CLIENTE ---
+  String nombreClienteGuardado = '';
+  String ciNitClienteGuardado = '';
+  String direccionGuardada = '';
+
   ChecklistProvider(this._db) {
     tensionController.addListener(notifyListeners);
     tierraController.addListener(notifyListeners);
@@ -47,10 +53,45 @@ class ChecklistProvider extends ChangeNotifier {
 
   void refresh() => notifyListeners();
 
+  // METODO edit datos de borrador
+  void cargadorBorrador(CertificacionesChecklistData registro) {
+    currentInstalacionId = registro.instalacionId;
+
+    // Cargamos los datos del cliente
+    nombreClienteGuardado = registro.nombreCliente;
+    ciNitClienteGuardado = registro.ciNitCliente;
+    direccionGuardada = registro.direccionInstalacion;
+
+    visFijacion = registro.visFijacion;
+    visCables = registro.visCables;
+    visProteccion = registro.visProteccion;
+    visIdentificacion = registro.visIdentificacion;
+    visDanos = registro.visDanos;
+
+    elecContinuidad = registro.elecContinuidad;
+    funEncendido = registro.funEncendido;
+    funCorriente = registro.funCorriente;
+    funTemperatura = registro.funTemperatura;
+    funEmergencia = registro.funEmergencia;
+
+    docFoto = registro.docFoto;
+    docDiagrama = registro.docDiagrama;
+    docCertificado = registro.docCertificadoTierra;
+    docManual = registro.docManual;
+
+    tensionController.text = registro.tensionMedidaV != null ? registro.tensionMedidaV.toString() : '';
+    tierraController.text = registro.resistenciaTierraOhms != null ? registro.resistenciaTierraOhms.toString() : '';
+
+    notifyListeners(); // aviso de los cambios en pantalla
+  }
+
   // Validador global estricto
   bool get isChecklistComplete {
-    double tierra = double.tryParse(tierraController.text) ?? 999.0;
-    bool tierraOk = (tierra == 0) ? true : (tierra <= 25.0);
+    bool tierraOk = true; 
+    if (tierraController.text.isNotEmpty) {
+      double tierra = double.tryParse(tierraController.text) ?? 999.0;
+      tierraOk = (tierra <= 25.0);
+    }
     bool tensionOk = tensionController.text.isNotEmpty;
 
     bool visualOk = visFijacion && visCables && visProteccion && visIdentificacion && visDanos;
@@ -70,11 +111,16 @@ class ChecklistProvider extends ChangeNotifier {
       final isReady = isChecklistComplete;
       
       // Instalacion Padre con nombre del cliente
-      final instalacionId = await _db.crearInstalacion('Certificación: $nombreCliente');
+      int idToUse;
+      if (currentInstalacionId != null) {
+        idToUse = currentInstalacionId!; // Actualizamos el borrador existente
+      } else {
+        idToUse = await _db.crearInstalacion('Certificación: $nombreCliente'); // Creamos uno nuevo
+      }
 
       // Preparamos el Companion
       final nuevoCertificado = CertificacionesChecklistCompanion.insert(
-        instalacionId: instalacionId,
+        instalacionId: idToUse,
         nombreCliente: nombreCliente,
         ciNitCliente: ciNitCliente ?? '',
         direccionInstalacion: drift.Value(direccion),
@@ -111,6 +157,7 @@ class ChecklistProvider extends ChangeNotifier {
   }
 
   void _limpiarFormulario() {
+    currentInstalacionId = null;
     visFijacion = false; visCables = false; visProteccion = false; 
     visIdentificacion = false; visDanos = false; elecContinuidad = false;
     funEncendido = false; funCorriente = false; funTemperatura = false; 
@@ -118,5 +165,33 @@ class ChecklistProvider extends ChangeNotifier {
     docCertificado = false; docManual = false;
     tensionController.clear();
     tierraController.clear();
+  }
+
+  CertificacionesChecklistData crearRegistroTemporal({required String nombreCliente, required String ciNitCliente, required String direccion}) {
+    return CertificacionesChecklistData(
+      id: currentInstalacionId ?? 0, 
+      instalacionId: currentInstalacionId ?? 0, 
+      nombreCliente: nombreCliente, 
+      ciNitCliente: ciNitCliente, 
+      direccionInstalacion: direccion, 
+      visFijacion: visFijacion, 
+      visCables: visCables, 
+      visProteccion: visProteccion, 
+      visIdentificacion: visIdentificacion, 
+      visDanos: visDanos, 
+      tensionMedidaV: double.tryParse(tensionController.text), 
+      resistenciaTierraOhms: double.tryParse(tierraController.text), 
+      elecContinuidad: elecContinuidad, 
+      funEncendido: funEncendido, 
+      funCorriente: funCorriente, 
+      funTemperatura: funTemperatura, 
+      funEmergencia: funEmergencia, 
+      docFoto: docFoto, 
+      docDiagrama: docDiagrama, 
+      docCertificadoTierra: docCertificado, 
+      docManual: docManual, 
+      isCompletado: isChecklistComplete, 
+      fechaRegistro: DateTime.now()
+    );
   }
 }
