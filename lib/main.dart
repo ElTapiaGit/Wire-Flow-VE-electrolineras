@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../core/constants/app_colors.dart';
+import 'core/constants/app_colors.dart';
 import 'core/database/app_database.dart'; 
 import 'features/dashboard/providers/dashboard_provider.dart';
 import 'features/checklist/providers/checklist_provider.dart';

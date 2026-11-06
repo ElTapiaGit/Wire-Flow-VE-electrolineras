@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart'; 
+import '../../checklist/providers/checklist_provider.dart';
 import '../providers/dashboard_provider.dart';
 import 'detalle_registro_screen.dart';
 import 'historial_completo_screen.dart';
@@ -208,6 +209,7 @@ class DashboardScreen extends StatelessWidget {
           accentColor: Theme.of(context).colorScheme.tertiaryContainer,
           onAccentColor: Theme.of(context).colorScheme.onTertiaryContainer,
           onTap: () async {
+            context.read<ChecklistProvider>().iniciarNuevoChecklist();
             await Navigator.pushNamed(context, '/checklist');
             if (context.mounted) {
               context.read<DashboardProvider>().cargarHistorial();

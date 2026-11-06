@@ -15,9 +15,9 @@ class PantallaDetalleRegistro extends StatelessWidget {
   Widget build(BuildContext context) {
     // REACTIVIDAD: Escuchamos el historial global
     final dashboardProvider = context.watch<DashboardProvider>();
-    // Buscamos la version mas reciente de este registro en específico
+    // Buscamos la version mas reciente de este registro en específico por su clave de instalacion
     final registroActualizado = dashboardProvider.historial.firstWhere(
-      (r) => r.id == registro.id,
+      (r) => r.instalacionId == registro.instalacionId,
       orElse: () => registro, // Si por alguna razón no lo encuentra, usa el viejo
     );
     final bool isCertificado = registroActualizado.isCompletado;
@@ -69,28 +69,28 @@ class PantallaDetalleRegistro extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        fechaFormat.format(registro.fechaRegistro),
+                        fechaFormat.format(registroActualizado.fechaRegistro),
                         style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.outline),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Text(registro.nombreCliente, style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 22, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
+                  Text(registroActualizado.nombreCliente, style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 22, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
                   const SizedBox(height: 8),
                   Row(
                     children: [
                       Icon(Icons.location_on, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
                       const SizedBox(width: 4),
-                      Expanded(child: Text(registro.direccionInstalacion, style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant))),
+                      Expanded(child: Text(registroActualizado.direccionInstalacion, style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant))),
                     ],
                   ),
-                  if (registro.ciNitCliente.isNotEmpty) ...[
+                  if (registroActualizado.ciNitCliente.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Row(
                       children: [
                         Icon(Icons.badge, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
                         const SizedBox(width: 4),
-                        Text('CI/NIT: ${registro.ciNitCliente}', style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                        Text('CI/NIT: ${registroActualizado.ciNitCliente}', style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       ],
                     ),
                   ]
@@ -103,11 +103,11 @@ class PantallaDetalleRegistro extends StatelessWidget {
             Text('DATOS TÉCNICOS REGISTRADOS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.0, color: Theme.of(context).colorScheme.outline)),
             const SizedBox(height: 12),
             
-            _buildDataRow(context, 'Tensión Medida', registro.tensionMedidaV != null ? '${registro.tensionMedidaV} V' : 'No registrada', Icons.electrical_services),
+            _buildDataRow(context, 'Tensión Medida', registroActualizado.tensionMedidaV != null ? '${registroActualizado.tensionMedidaV} V' : 'No registrada', Icons.electrical_services),
             const Divider(height: 1),
-            _buildDataRow(context, 'Puesta a Tierra', registro.resistenciaTierraOhms != null ? '${registro.resistenciaTierraOhms} Ω' : 'No registrada', Icons.sensors),
+            _buildDataRow(context, 'Puesta a Tierra', registroActualizado.resistenciaTierraOhms != null ? '${registroActualizado.resistenciaTierraOhms} Ω' : 'No registrada', Icons.sensors),
             const Divider(height: 1),
-            _buildDataRow(context, 'Pruebas Operativas', registro.funEncendido && registro.funCorriente ? 'Aprobadas' : 'Incompletas', Icons.check_circle_outline),
+            _buildDataRow(context, 'Pruebas Operativas', registroActualizado.funEncendido && registroActualizado.funCorriente ? 'Aprobadas' : 'Incompletas', Icons.check_circle_outline),
           ],
         ),
       ),
@@ -157,7 +157,7 @@ class PantallaDetalleRegistro extends StatelessWidget {
                 height: 52,
                 child: isCertificado 
                   ? ElevatedButton.icon(
-                      onPressed: () async => await PdfService.generarCertificado(registro),
+                      onPressed: () async => await PdfService.generarCertificado(registroActualizado),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).colorScheme.secondary,
                         foregroundColor: Theme.of(context).colorScheme.surface, // Texto oscuro o claro según el tema
@@ -167,7 +167,7 @@ class PantallaDetalleRegistro extends StatelessWidget {
                       label: const Text('GENERAR ACTA EN PDF', style: TextStyle(fontFamily: 'Space Grotesk', fontWeight: FontWeight.bold, letterSpacing: 1.0)),
                     )
                   : OutlinedButton.icon(
-                      onPressed: () async => await PdfService.generarCertificado(registro),
+                      onPressed: () async => await PdfService.generarCertificado(registroActualizado),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Theme.of(context).colorScheme.primary,
                         side: BorderSide(color: Theme.of(context).colorScheme.primary),

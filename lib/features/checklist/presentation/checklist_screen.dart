@@ -20,122 +20,13 @@ class ChecklistScreen extends StatelessWidget {
   }
 
   void _mostrarDialogoGuardar(BuildContext context, ChecklistProvider provider) {
-    // LOGICA DE EDICION: Si ya tenemos un ID (es un borrador cargado), pre-llenamos los campos
-    final isEditing = provider.currentInstalacionId != null;
-
-    final nombreController = TextEditingController(text: isEditing ? provider.nombreClienteGuardado : '');
-    final ciController = TextEditingController(text: isEditing ? provider.ciNitClienteGuardado : '');
-    final direccionController = TextEditingController(text: isEditing ? provider.direccionGuardada : '');
-    
-    final isReady = provider.isChecklistComplete;
-
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
-          title: Row(
-            children: [
-              Icon(isReady ? Icons.verified : Icons.save, color: isReady ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  isReady ? 'Certificar Entrega' : (isEditing ? 'Actualizar Borrador' : 'Guardar Registro'), 
-                  style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 18, fontWeight: FontWeight.bold, color: isReady ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.primary)
-                ),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isReady 
-                    ? 'La instalación cumple con todas las normativas. Ingresa los datos del cliente.'
-                    : 'Faltan datos o pruebas. El registro se guardará como pendiente en tu Historial.',
-                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: nombreController,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: InputDecoration(
-                    labelText: 'Nombre del Cliente / Empresa *', 
-                    labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary), 
-                    border: OutlineInputBorder(), isDense: true,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: direccionController,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: InputDecoration(
-                    labelText: 'Dirección de Instalación *', 
-                    prefixIcon: Icon(Icons.location_on, size: 18), 
-                    labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary), 
-                    border: OutlineInputBorder(), isDense: true,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: ciController,
-                  keyboardType: TextInputType.text,
-                  decoration: InputDecoration(
-                    labelText: 'C.I. / NIT (Opcional)', 
-                    labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary), 
-                    border: OutlineInputBorder(), isDense: true
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('Cancelar', style: TextStyle(color: Theme.of(context).colorScheme.outline)),
-            ),
-            ElevatedButton(
-              onPressed: provider.isSaving ? null : () async {
-                if (nombreController.text.isEmpty || direccionController.text.isEmpty) {
-                  ScaffoldMessenger.of(dialogContext).showSnackBar(
-                    SnackBar(content: Text('Nombre y Dirección son obligatorios para el certificado.'), backgroundColor: Theme.of(context).colorScheme.error)
-                  );
-                  return;
-                }
-
-                // logica del guarada Provider
-                await provider.guardarRegistroFinal(
-                  nombreCliente: nombreController.text.trim(), 
-                  ciNitCliente: ciController.text.trim(),
-                  direccion: direccionController.text.trim(),
-                );
-
-                if (dialogContext.mounted) {
-                  Navigator.pop(dialogContext); 
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(isReady ? 'Certificado guardado correctamente.' : '💾 Registro guardado en BD como pendiente.'), 
-                      backgroundColor: isReady ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.primary,
-                      behavior: SnackBarBehavior.floating,
-                    )
-                  );
-                  Navigator.pop(context); 
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isReady ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.primary, 
-                foregroundColor: isReady ? Theme.of(context).colorScheme.surface : Theme.of(context).colorScheme.onPrimaryContainer,
-              ),
-              child: provider.isSaving 
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        );
-      }
+      builder: (dialogContext) => _DialogoGuardarRegistro(
+        provider: provider,
+        parentContext: context,
+      ),
     );
   }
 
@@ -265,9 +156,71 @@ class ChecklistScreen extends StatelessWidget {
 
   // PRUEBAS ELECTRICAS 
   Widget _buildElectricalTestsTile(BuildContext context, ChecklistProvider p) {
-    double ohms = double.tryParse(p.tierraController.text) ?? 0.0;
-    bool isError = ohms > 10.0 && p.tierraController.text.isNotEmpty;
-    bool isSuccess = ohms > 0.0 && ohms <= 10.0;
+    final tierraTexto = p.tierraController.text.trim().replaceAll(',', '.');
+    final double? parsedOhms = double.tryParse(tierraTexto);
+    final bool hasTierra = tierraTexto.isNotEmpty;
+
+    // Tres estados visuales según requerimiento y NB 777:
+    // 1. ohms > 0 && ohms <= 10.0: Verde / Éxito (Óptimo)
+    // 2. ohms > 10.0 && ohms <= 25.0: Ámbar / Info (Aceptable residencial NB 777)
+    // 3. ohms > 25.0 o <= 0: Rojo / Error (Peligroso / No conforme)
+    final bool isSuccess = hasTierra && parsedOhms != null && parsedOhms > 0.0 && parsedOhms <= 10.0;
+    final bool isAceptable = hasTierra && parsedOhms != null && parsedOhms > 10.0 && parsedOhms <= 25.0;
+    final bool isError = hasTierra && (parsedOhms == null || parsedOhms <= 0.0 || parsedOhms > 25.0);
+
+    Color colorEstado = Theme.of(context).colorScheme.onSurface;
+    Color colorBorde = Theme.of(context).colorScheme.outlineVariant;
+    Color colorFocus = Theme.of(context).colorScheme.primary;
+
+    if (isError) {
+      colorEstado = Theme.of(context).colorScheme.error;
+      colorBorde = Theme.of(context).colorScheme.error;
+      colorFocus = Theme.of(context).colorScheme.error;
+    } else if (isSuccess) {
+      colorEstado = Theme.of(context).colorScheme.secondary;
+      colorBorde = Theme.of(context).colorScheme.secondary;
+      colorFocus = Theme.of(context).colorScheme.secondary;
+    } else if (isAceptable) {
+      colorEstado = Theme.of(context).colorScheme.tertiaryContainer;
+      colorBorde = Theme.of(context).colorScheme.tertiaryContainer;
+      colorFocus = Theme.of(context).colorScheme.tertiaryContainer;
+    }
+
+    Widget? suffixWidget;
+    if (isError) {
+      suffixWidget = Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.warning, color: Theme.of(context).colorScheme.error, size: 20),
+          Text(
+            (parsedOhms != null && parsedOhms <= 0.0) ? 'Inválido (≤0Ω)' : 'Peligroso (>25Ω)',
+            style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.error),
+          ),
+        ],
+      );
+    } else if (isSuccess) {
+      suffixWidget = Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.check_circle, color: Theme.of(context).colorScheme.secondary, size: 20),
+          Text(
+            'Óptimo (≤10Ω)',
+            style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.secondary),
+          ),
+        ],
+      );
+    } else if (isAceptable) {
+      suffixWidget = Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.info_outline, color: Theme.of(context).colorScheme.tertiaryContainer, size: 20),
+          Text(
+            'Aceptable (≤25Ω)',
+            style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.tertiaryContainer),
+          ),
+        ],
+      );
+    }
 
     return _buildCustomExpansionTile(
       context,
@@ -280,8 +233,8 @@ class ChecklistScreen extends StatelessWidget {
             children: [
               _buildSimpleInput(context, 'Tensión en el punto (Multímetro)', p.tensionController, 'V', 'Ej: 230'),
               Padding(
-                padding: EdgeInsets.only(left: 14, top: 4, bottom: 16), 
-                child: Text('Tensión nominal al ±10%.', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant))
+                padding: const EdgeInsets.only(left: 14, top: 4, bottom: 16), 
+                child: Text('Tensión nominal operativa (180V - 460V).', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant))
               ),
               
               Text('RESISTENCIA PUESTA A TIERRA', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.0, color: Theme.of(context).colorScheme.onSurfaceVariant)),
@@ -289,20 +242,20 @@ class ChecklistScreen extends StatelessWidget {
               TextField(
                 controller: p.tierraController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 24, fontWeight: FontWeight.bold, color: isError ? Theme.of(context).colorScheme.error : (isSuccess ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.onSurface)),
+                style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 24, fontWeight: FontWeight.bold, color: colorEstado),
                 decoration: InputDecoration(
                   hintText: 'Ej: 5.4',
-                  hintStyle: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.3)), filled: true, fillColor: Theme.of(context).colorScheme.surfaceContainerLowest,
-                  border: UnderlineInputBorder(borderSide: BorderSide(color: isError ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.outlineVariant, width: 2)),
-                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: isError ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.outlineVariant, width: 2)),
-                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: isError ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.primary, width: 2)),
-                  suffixIcon: isError 
-                      ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.warning, color: Theme.of(context).colorScheme.error, size: 20), Text('Peligroso (>25Ω)', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.error))])
-                      : (isSuccess ? Icon(Icons.check_circle, color: Theme.of(context).colorScheme.secondary) : const SizedBox.shrink()),
+                  hintStyle: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.3)), 
+                  filled: true, 
+                  fillColor: Theme.of(context).colorScheme.surfaceContainerLowest,
+                  border: UnderlineInputBorder(borderSide: BorderSide(color: colorBorde, width: 2)),
+                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: colorBorde, width: 2)),
+                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: colorFocus, width: 2)),
+                  suffixIcon: suffixWidget ?? const SizedBox.shrink(),
                 ),
               ),
               Padding(
-                padding: EdgeInsets.only(left: 14, top: 8, bottom: 16), 
+                padding: const EdgeInsets.only(left: 14, top: 8, bottom: 16), 
                 child: Text('Ideal < 10 Ω. Aceptable doméstico ≤ 25 Ω. Dejar en blanco si un tercero validará con telurómetro.', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant, fontStyle: FontStyle.italic))
               ),
               _buildCheckboxItem(context, value: p.elecContinuidad, title: 'Continuidad', subtitle: 'Fase, Neutro y Tierra medidos.', onChanged: (v) { p.elecContinuidad = v ?? false; p.refresh(); }),
@@ -442,6 +395,157 @@ class ChecklistScreen extends StatelessWidget {
           children: children,
         ),
       ),
+    );
+  }
+}
+
+class _DialogoGuardarRegistro extends StatefulWidget {
+  final ChecklistProvider provider;
+  final BuildContext parentContext;
+
+  const _DialogoGuardarRegistro({
+    required this.provider,
+    required this.parentContext,
+  });
+
+  @override
+  State<_DialogoGuardarRegistro> createState() => _DialogoGuardarRegistroState();
+}
+
+class _DialogoGuardarRegistroState extends State<_DialogoGuardarRegistro> {
+  late final TextEditingController _nombreController;
+  late final TextEditingController _ciController;
+  late final TextEditingController _direccionController;
+
+  @override
+  void initState() {
+    super.initState();
+    final isEditing = widget.provider.currentInstalacionId != null;
+    _nombreController = TextEditingController(text: isEditing ? widget.provider.nombreClienteGuardado : '');
+    _ciController = TextEditingController(text: isEditing ? widget.provider.ciNitClienteGuardado : '');
+    _direccionController = TextEditingController(text: isEditing ? widget.provider.direccionGuardada : '');
+  }
+
+  @override
+  void dispose() {
+    _nombreController.dispose();
+    _ciController.dispose();
+    _direccionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = widget.provider;
+    final isEditing = provider.currentInstalacionId != null;
+    final isReady = provider.isChecklistComplete;
+
+    return AlertDialog(
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+      title: Row(
+        children: [
+          Icon(isReady ? Icons.verified : Icons.save, color: isReady ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isReady ? 'Certificar Entrega' : (isEditing ? 'Actualizar Borrador' : 'Guardar Registro'), 
+              style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 18, fontWeight: FontWeight.bold, color: isReady ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.primary)
+            ),
+          ),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isReady 
+                ? 'La instalación cumple con todas las normativas. Ingresa los datos del cliente.'
+                : 'Faltan datos o pruebas. El registro se guardará como pendiente en tu Historial.',
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _nombreController,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                labelText: 'Nombre del Cliente / Empresa *', 
+                labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary), 
+                border: const OutlineInputBorder(), 
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _direccionController,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(
+                labelText: 'Dirección de Instalación *', 
+                prefixIcon: const Icon(Icons.location_on, size: 18), 
+                labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary), 
+                border: const OutlineInputBorder(), 
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _ciController,
+              keyboardType: TextInputType.text,
+              decoration: InputDecoration(
+                labelText: 'C.I. / NIT (Opcional)', 
+                labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary), 
+                border: const OutlineInputBorder(), 
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Cancelar', style: TextStyle(color: Theme.of(context).colorScheme.outline)),
+        ),
+        ElevatedButton(
+          onPressed: provider.isSaving ? null : () async {
+            if (_nombreController.text.trim().isEmpty || _direccionController.text.trim().isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Nombre y Dirección son obligatorios para el certificado.'), 
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                )
+              );
+              return;
+            }
+
+            await provider.guardarRegistroFinal(
+              nombreCliente: _nombreController.text.trim(), 
+              ciNitCliente: _ciController.text.trim(),
+              direccion: _direccionController.text.trim(),
+            );
+
+            if (context.mounted) {
+              Navigator.pop(context); 
+              ScaffoldMessenger.of(widget.parentContext).showSnackBar(
+                SnackBar(
+                  content: Text(isReady ? 'Certificado guardado correctamente.' : '💾 Registro guardado en BD como pendiente.'), 
+                  backgroundColor: isReady ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.primary,
+                  behavior: SnackBarBehavior.floating,
+                )
+              );
+              Navigator.pop(widget.parentContext); 
+            }
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: isReady ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.primary, 
+            foregroundColor: isReady ? Theme.of(context).colorScheme.surface : Theme.of(context).colorScheme.onPrimaryContainer,
+          ),
+          child: provider.isSaving 
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              : const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
+      ],
     );
   }
 }

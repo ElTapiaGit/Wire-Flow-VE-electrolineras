@@ -111,6 +111,31 @@ class AppDatabase extends _$AppDatabase {
   @override
   int get schemaVersion => 2; 
 
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (Migrator m) async {
+      // Creacion inicial completa para instalaciones nuevas
+      await m.createAll();
+    },
+    onUpgrade: (Migrator m, int from, int to) async {
+      // Migracion no destructiva que preserva el 100% de datos existentes
+      if (from < 2) {
+        // Validamos si la tabla certificaciones_checklist ya existia para no afectarla
+        final tableCheck = await customSelect(
+          "SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='certificaciones_checklist'",
+        ).getSingle();
+        
+        if (tableCheck.read<int>('c') == 0) {
+          await m.createTable(certificacionesChecklist);
+        }
+      }
+    },
+    beforeOpen: (details) async {
+      // Habilitar claves foraneas en tiempo de ejecucion para integridad referencial
+      await customStatement('PRAGMA foreign_keys = ON;');
+    },
+  ); 
+
   // METODOS DE LA BASE DE DATOS 
   Future<int> crearInstalacion(String titulo) {
     return into(instalaciones).insert(
@@ -157,20 +182,29 @@ class AppDatabase extends _$AppDatabase {
 
   // Guardar o Actualizar el Checklist de Certificacion
   Future<void> upsertCertificacionChecklist(CertificacionesChecklistCompanion cert) async {
-    // 1. Borramos el certificado anterior si existia para esta instalacion
-    await (delete(certificacionesChecklist)
-          ..where((t) => t.instalacionId.equals(cert.instalacionId.value)))
-        .go();
-    
-    // 2. Insertamos el nuevo
-    await into(certificacionesChecklist).insert(cert);
+    await transaction(() async {
+      // 1. Consultamos si ya existe un registro para esta instalacion
+      final existente = await (select(certificacionesChecklist)
+            ..where((t) => t.instalacionId.equals(cert.instalacionId.value)))
+          .getSingleOrNull();
 
-    // 3. Actualizamos el estado general de la instalacion a "Certificada" si corresponde
-    if (cert.isCompletado.value) {
-      await (update(instalaciones)
-            ..where((t) => t.id.equals(cert.instalacionId.value)))
-          .write(const InstalacionesCompanion(estado: Value('Certificada')));
-    }
+      if (existente != null) {
+        // 2. Si existe: actualizamos las columnas sin alterar la clave primaria (id)
+        await (update(certificacionesChecklist)
+              ..where((t) => t.instalacionId.equals(cert.instalacionId.value)))
+            .write(cert);
+      } else {
+        // 3. Si no existe: insertamos el nuevo registro
+        await into(certificacionesChecklist).insert(cert);
+      }
+
+      // 4. Actualizamos el estado general de la instalacion a "Certificada" si corresponde
+      if (cert.isCompletado.value) {
+        await (update(instalaciones)
+              ..where((t) => t.id.equals(cert.instalacionId.value)))
+            .write(const InstalacionesCompanion(estado: Value('Certificada')));
+      }
+    });
   }
 
   // Obtener todos los certificados (util para el Dashboard "Actividad Reciente")

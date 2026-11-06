@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:wireflow_ve/core/constants/app_constants.dart';
+import 'package:wireflow_ve/core/services/pdf_service.dart';
 
 class CommercialScreen extends StatefulWidget {
   const CommercialScreen({super.key});
@@ -22,12 +23,22 @@ class _CommercialScreenState extends State<CommercialScreen> {
 
   // ESTADO: PESTAÑA 2 (PRESUPUESTO)
   String _calibreSeleccionado = '8';
+  bool _isProteccionesExpanded = false;
+  bool _isGeneratingPdf = false;
   
   // Controladores para que el tecnico edite todo a su gusto
   final TextEditingController _metrosController = TextEditingController(text: '15');
   late final TextEditingController _precioMetroController;
-  final TextEditingController _proteccionesController = TextEditingController(text: AppConstants.precioBaseProtecciones.toStringAsFixed(2));
+  final TextEditingController _proteccionesController = TextEditingController(text: '675.00');
   final TextEditingController _manoObraController = TextEditingController(text: AppConstants.precioBaseManoObra.toStringAsFixed(2));
+
+  // Controladores de componentes individuales de protecciones (Precios mercado Bolivia)
+  final TextEditingController _gabineteCtrl = TextEditingController(text: '80.00');
+  final TextEditingController _mcbCtrl = TextEditingController(text: '45.00');
+  final TextEditingController _rcdCtrl = TextEditingController(text: '240.00');
+  final TextEditingController _spdCtrl = TextEditingController(text: '140.00');
+  final TextEditingController _ovpCtrl = TextEditingController(text: '85.00');
+  final TextEditingController _patCtrl = TextEditingController(text: '85.00');
   
   @override
   void initState() {
@@ -45,87 +56,148 @@ class _CommercialScreenState extends State<CommercialScreen> {
     _precioMetroController.dispose();
     _proteccionesController.dispose();
     _manoObraController.dispose();
+    _gabineteCtrl.dispose();
+    _mcbCtrl.dispose();
+    _rcdCtrl.dispose();
+    _spdCtrl.dispose();
+    _ovpCtrl.dispose();
+    _patCtrl.dispose();
     super.dispose();
   }
 
-  void _mostrarDialogoEdicion() {
-    final kwhCtrl = TextEditingController(text: _precioKwh.toStringAsFixed(2));
-    final gnvCtrl = TextEditingController(text: _precioGnv.toStringAsFixed(2));
-    final gasCtrl = TextEditingController(text: _precioGasolina.toStringAsFixed(2));
+  void _recalcularTotalProtecciones() {
+    final double g = double.tryParse(_gabineteCtrl.text.trim().replaceAll(',', '.')) ?? 0;
+    final double m = double.tryParse(_mcbCtrl.text.trim().replaceAll(',', '.')) ?? 0;
+    final double r = double.tryParse(_rcdCtrl.text.trim().replaceAll(',', '.')) ?? 0;
+    final double s = double.tryParse(_spdCtrl.text.trim().replaceAll(',', '.')) ?? 0;
+    final double o = double.tryParse(_ovpCtrl.text.trim().replaceAll(',', '.')) ?? 0;
+    final double p = double.tryParse(_patCtrl.text.trim().replaceAll(',', '.')) ?? 0;
+    final double total = g + m + r + s + o + p;
+    _proteccionesController.text = total.toStringAsFixed(2);
+    setState(() {});
+  }
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
-          title: Text('Precios Unitarios', style: TextStyle(fontFamily: 'Space Grotesk', color: Theme.of(context).colorScheme.primary)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: kwhCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(labelText: 'Electricidad (Bs / kWh)', labelStyle: TextStyle(color: Theme.of(context).colorScheme.secondary)),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: gasCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Gasolina (Bs / Litro)', labelStyle: TextStyle(color: Color(0xFFFF1744))),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: gnvCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'GNV (Bs / m³)', labelStyle: TextStyle(color: Color(0xFFFFD600))),
-              ),
-            ],
+  void _restaurarPreciosSugeridosProtecciones() {
+    _gabineteCtrl.text = '80.00';
+    _mcbCtrl.text = '45.00';
+    _rcdCtrl.text = '240.00';
+    _spdCtrl.text = '140.00';
+    _ovpCtrl.text = '85.00';
+    _patCtrl.text = '85.00';
+    _recalcularTotalProtecciones();
+  }
+
+  Future<void> _generarPdfComercial() async {
+    if (_isGeneratingPdf) return;
+
+    setState(() {
+      _isGeneratingPdf = true;
+    });
+
+    try {
+      final double metros = double.tryParse(_metrosController.text.trim().replaceAll(',', '.')) ?? 0.0;
+      final double precioPorMetro = double.tryParse(_precioMetroController.text.trim().replaceAll(',', '.')) ?? 0.0;
+      final double protecciones = double.tryParse(_proteccionesController.text.trim().replaceAll(',', '.')) ?? 0.0;
+      final double manoObra = double.tryParse(_manoObraController.text.trim().replaceAll(',', '.')) ?? 0.0;
+      final double costoTotalCable = metros * precioPorMetro;
+      final double subtotalMateriales = costoTotalCable + protecciones;
+      final double granTotal = subtotalMateriales + manoObra;
+
+      // Lectura del Ahorro Anual y Mensual vs Gasolina (Pestaña Comparativa)
+      final double bateriaKwh = double.tryParse(_batteryController.text.trim().replaceAll(',', '.')) ?? 0.0;
+      final double potenciaCargadorKw = double.tryParse(_chargerPowerController.text.trim().replaceAll(',', '.')) ?? 0.0;
+      final bool esDatoValido = bateriaKwh > 0 && potenciaCargadorKw > 0;
+
+      final double ahorroAnual = esDatoValido
+          ? ((15000 / AppConstants.consumoGasolinaKmPorL * _precioGasolina) - (15000 * AppConstants.consumoEvKwhPorKm * _precioKwh))
+          : 0.0;
+      final double ahorroMensual = ahorroAnual > 0 ? ahorroAnual / 12 : 0.0;
+
+      final desglose = <String, double>{
+        'Gabinete estanco IP65': double.tryParse(_gabineteCtrl.text.trim().replaceAll(',', '.')) ?? 80.0,
+        'Disyuntor Termomagnético Bipolar Curva C': double.tryParse(_mcbCtrl.text.trim().replaceAll(',', '.')) ?? 45.0,
+        'Interruptor Diferencial Tipo A 30mA': double.tryParse(_rcdCtrl.text.trim().replaceAll(',', '.')) ?? 240.0,
+        'Protector de Sobretensión SPD Clase II': double.tryParse(_spdCtrl.text.trim().replaceAll(',', '.')) ?? 140.0,
+        'Relé de Monitoreo de Tensión OVP/UVP': double.tryParse(_ovpCtrl.text.trim().replaceAll(',', '.')) ?? 85.0,
+        'Kit de Puesta a Tierra y Conexión': double.tryParse(_patCtrl.text.trim().replaceAll(',', '.')) ?? 85.0,
+      };
+
+      await PdfService.generarCotizacionComercialPdf(
+        context: context,
+        calibreAwg: _calibreSeleccionado,
+        distanciaM: metros,
+        precioMetroCable: precioPorMetro,
+        costoTotalCable: costoTotalCable,
+        costoProtecciones: protecciones,
+        desgloseProtecciones: desglose,
+        costoManoObra: manoObra,
+        subtotalMateriales: subtotalMateriales,
+        totalEstimado: granTotal,
+        ahorroMensualVsGasolina: ahorroMensual,
+        ahorroAnualVsGasolina: ahorroAnual,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al generar la cotización: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('Cancelar', style: TextStyle(color: Theme.of(context).colorScheme.outline)),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _precioKwh = double.tryParse(kwhCtrl.text) ?? _precioKwh;
-                  _precioGnv = double.tryParse(gnvCtrl.text) ?? _precioGnv;
-                  _precioGasolina = double.tryParse(gasCtrl.text) ?? _precioGasolina;
-                });
-                Navigator.pop(context);
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primaryContainer, foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer),
-              child: const Text('Guardar'),
-            ),
-          ],
         );
       }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGeneratingPdf = false;
+        });
+      }
+    }
+  }
+
+  void _mostrarDialogoEdicion() {
+    showDialog(
+      context: context,
+      builder: (context) => _DialogoEdicionTarifas(
+        precioKwh: _precioKwh,
+        precioGnv: _precioGnv,
+        precioGasolina: _precioGasolina,
+        onGuardar: (kwh, gnv, gas) {
+          setState(() {
+            _precioKwh = kwh;
+            _precioGnv = gnv;
+            _precioGasolina = gas;
+          });
+        },
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            _buildModuleHeaderAndTabs(),
-            
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(left: 24.0, right: 24.0, bottom: 100.0),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: _currentTabIndex == 0 
-                      ? _buildAhorroTab() 
-                      : _buildPresupuestoTab(),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Scaffold(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(),
+              _buildModuleHeaderAndTabs(),
+              
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.only(left: 24.0, right: 24.0, bottom: 100.0),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: _currentTabIndex == 0 
+                        ? _buildAhorroTab() 
+                        : _buildPresupuestoTab(),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -212,27 +284,32 @@ class _CommercialScreenState extends State<CommercialScreen> {
 
   // PESTAÑA 1: CALCULADORA DE AHORRO 
   Widget _buildAhorroTab() {
-    // 1. Lectura de variables
-    final double bateriaKwh = double.tryParse(_batteryController.text) ?? 0.0;
-    final double potenciaCargadorKw = double.tryParse(_chargerPowerController.text) ?? 7.4;
+    // 1. Lectura de variables sanitizadas
+    final double bateriaKwh = double.tryParse(_batteryController.text.trim().replaceAll(',', '.')) ?? 0.0;
+    final double potenciaCargadorKw = double.tryParse(_chargerPowerController.text.trim().replaceAll(',', '.')) ?? 0.0;
 
-    // 2. CAlculos de Capacidad (Tanque Lleno)
-    final double tiempoCargaHoras = potenciaCargadorKw > 0 ? bateriaKwh / potenciaCargadorKw : 0.0;
-    final double autonomiaKm = bateriaKwh / AppConstants.consumoEvKwhPorKm;
+    // Validación estricta para evitar divisiones por cero, valores negativos o infinitos
+    final bool esDatoValido = bateriaKwh > 0 && potenciaCargadorKw > 0;
 
-    // 3. CAlculos de Costo para recorrer ESA autonomia
-    final double costoTanqueEv = bateriaKwh * _precioKwh;
+    // 2. Cálculos de Capacidad (Tanque Lleno)
+    final double tiempoCargaHoras = esDatoValido ? bateriaKwh / potenciaCargadorKw : 0.0;
+    final double autonomiaKm = esDatoValido ? bateriaKwh / AppConstants.consumoEvKwhPorKm : 0.0;
+
+    // 3. Cálculos de Costo para recorrer ESA autonomía
+    final double costoTanqueEv = esDatoValido ? bateriaKwh * _precioKwh : 0.0;
     
-    final double litrosGasolinaNecesarios = autonomiaKm / AppConstants.consumoGasolinaKmPorL;
-    final double costoTanqueGasolina = litrosGasolinaNecesarios * _precioGasolina;
+    final double litrosGasolinaNecesarios = esDatoValido ? autonomiaKm / AppConstants.consumoGasolinaKmPorL : 0.0;
+    final double costoTanqueGasolina = esDatoValido ? litrosGasolinaNecesarios * _precioGasolina : 0.0;
 
-    final double m3GnvNecesarios = autonomiaKm / AppConstants.consumoGnvKmPorM3;
-    final double costoTanqueGnv = m3GnvNecesarios * _precioGnv;
+    final double m3GnvNecesarios = esDatoValido ? autonomiaKm / AppConstants.consumoGnvKmPorM3 : 0.0;
+    final double costoTanqueGnv = esDatoValido ? m3GnvNecesarios * _precioGnv : 0.0;
 
     // 4. Ahorro Anual (Proyección a 15,000 km)
-    final double ahorroAnual = (15000 / AppConstants.consumoGasolinaKmPorL * _precioGasolina) - (15000 * AppConstants.consumoEvKwhPorKm * _precioKwh);
+    final double ahorroAnual = esDatoValido
+        ? ((15000 / AppConstants.consumoGasolinaKmPorL * _precioGasolina) - (15000 * AppConstants.consumoEvKwhPorKm * _precioKwh))
+        : 0.0;
 
-    // Referencia para la barra de progreso (El mas caro es el 100%)
+    // Referencia para la barra de progreso (El más caro es el 100%)
     final double maxCost = costoTanqueGasolina > costoTanqueGnv ? costoTanqueGasolina : costoTanqueGnv;
 
     return Column(
@@ -348,14 +425,14 @@ class _CommercialScreenState extends State<CommercialScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Tiempo de carga (0-100%)', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                      Text('~${tiempoCargaHoras.toStringAsFixed(1)} horas', style:  TextStyle(fontFamily: 'Space Grotesk', fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
+                      Text(esDatoValido ? '~${tiempoCargaHoras.toStringAsFixed(1)} horas' : '--', style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
                     ],
                   ),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text('Autonomía estimada', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                      Text('${autonomiaKm.toInt()} km', style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.secondary)),
+                      Text(esDatoValido ? '${autonomiaKm.toInt()} km' : '--', style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.secondary)),
                     ],
                   )
                 ],
@@ -384,7 +461,7 @@ class _CommercialScreenState extends State<CommercialScreen> {
                       children: [
                         Icon(Icons.compare_arrows, color: Theme.of(context).colorScheme.secondary, size: 20),
                         const SizedBox(width: 8),
-                        Expanded(child: Text('Costo para recorrer ${autonomiaKm.toInt()} km', style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface))),
+                        Expanded(child: Text(esDatoValido ? 'Costo para recorrer ${autonomiaKm.toInt()} km' : 'Costo para recorrer autonomía estimada', style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface))),
                       ],
                     ),
                   ),
@@ -434,7 +511,7 @@ class _CommercialScreenState extends State<CommercialScreen> {
   }
 
   Widget _buildProgressRow(String title, String cost, IconData icon, Color color, double percentage) {
-    final safePct = percentage > 1.0 ? 1.0 : (percentage < 0 ? 0.0 : percentage);
+    final safePct = (percentage.isNaN || percentage.isInfinite) ? 0.0 : (percentage > 1.0 ? 1.0 : (percentage < 0 ? 0.0 : percentage));
     return Column(
       children: [
         Row(
@@ -474,11 +551,11 @@ class _CommercialScreenState extends State<CommercialScreen> {
 
   // PESTAÑA 2: PRESUPUESTO 
   Widget _buildPresupuestoTab() {
-    // Lectura en tiempo real de los campos editables
-    double metros = double.tryParse(_metrosController.text) ?? 0;
-    double precioPorMetro = double.tryParse(_precioMetroController.text) ?? 0;
-    double protecciones = double.tryParse(_proteccionesController.text) ?? 0;
-    double manoObra = double.tryParse(_manoObraController.text) ?? 0;
+    // Lectura en tiempo real de los campos editables sanitizados con comas y puntos
+    double metros = double.tryParse(_metrosController.text.trim().replaceAll(',', '.')) ?? 0;
+    double precioPorMetro = double.tryParse(_precioMetroController.text.trim().replaceAll(',', '.')) ?? 0;
+    double protecciones = double.tryParse(_proteccionesController.text.trim().replaceAll(',', '.')) ?? 0;
+    double manoObra = double.tryParse(_manoObraController.text.trim().replaceAll(',', '.')) ?? 0;
 
     double costoTotalCable = metros * precioPorMetro;
     double subtotalMateriales = costoTotalCable + protecciones;
@@ -547,9 +624,94 @@ class _CommercialScreenState extends State<CommercialScreen> {
               
               Padding(padding: EdgeInsets.symmetric(vertical: 16.0), child: Divider(color: Theme.of(context).colorScheme.outlineVariant)),
               
-              Text('Tablero y Protecciones', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Tablero y Protecciones', 
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
+                  ),
+                  InkWell(
+                    onTap: () => setState(() => _isProteccionesExpanded = !_isProteccionesExpanded),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _isProteccionesExpanded ? Icons.expand_less : Icons.expand_more,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _isProteccionesExpanded ? 'Ocultar desglose' : 'Desglosar componentes',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 8),
               _buildInputEditable('Costo total de protecciones (Bs)', _proteccionesController),
+              if (_isProteccionesExpanded) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerLowest,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'COMPONENTES NORMATIVOS SUGERIDOS',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.8,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          InkWell(
+                            onTap: _restaurarPreciosSugeridosProtecciones,
+                            child: Text(
+                              'Restaurar sugeridos',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _buildFilaComponente('Gabinete / Tablero estanco IP65', _gabineteCtrl, 'Bs 80.00'),
+                      _buildFilaComponente('Disyuntor Termomagnético Bipolar Curva C', _mcbCtrl, 'Bs 45.00'),
+                      _buildFilaComponente('Interruptor Diferencial Tipo A 30mA', _rcdCtrl, 'Bs 240.00'),
+                      _buildFilaComponente('Protector de Sobretensión SPD Clase II', _spdCtrl, 'Bs 140.00'),
+                      _buildFilaComponente('Relé de Monitoreo de Tensión OVP/UVP', _ovpCtrl, 'Bs 85.00'),
+                      _buildFilaComponente('Kit de Puesta a Tierra y Conexión', _patCtrl, 'Bs 85.00', isLast: true),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -612,26 +774,95 @@ class _CommercialScreenState extends State<CommercialScreen> {
           ),
         ),
         
-        //const SizedBox(height: 24),
+        const SizedBox(height: 24),
         
-        /*/ BOTON EXPORTAR 
+        // BOTON EXPORTAR COTIZACION
         SizedBox(
           width: double.infinity,
           height: 56,
           child: ElevatedButton.icon(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Generando PDF... (Próximamente)'), backgroundColor: AppColors.secondaryContainer));
-            },
+            onPressed: _isGeneratingPdf ? null : _generarPdfComercial,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryContainer,
-              foregroundColor: AppColors.onPrimaryContainer,
+              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+              foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
             ),
-            icon: const Icon(Icons.picture_as_pdf),
-            label: const Text('GENERAR PDF PARA CLIENTE', style: TextStyle(fontFamily: 'Space Grotesk', fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+            icon: _isGeneratingPdf
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    ),
+                  )
+                : const Icon(Icons.picture_as_pdf),
+            label: Text(
+              _isGeneratingPdf ? 'GENERANDO PDF...' : 'GENERAR PDF PARA CLIENTE',
+              style: const TextStyle(fontFamily: 'Space Grotesk', fontWeight: FontWeight.bold, letterSpacing: 1.0),
+            ),
           ),
-        )*/
+        ),
       ],
+    );
+  }
+
+  Widget _buildFilaComponente(String title, TextEditingController controller, String sugerido, {bool isLast = false}) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+                Text(
+                  'Sugerido: $sugerido',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          SizedBox(
+            width: 85,
+            height: 38,
+            child: TextField(
+              controller: controller,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              onChanged: (v) => _recalcularTotalProtecciones(),
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                fontFamily: 'Space Grotesk',
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                filled: true,
+                fillColor: Theme.of(context).colorScheme.surfaceContainerLow,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: BorderSide(color: Theme.of(context).colorScheme.primary)),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -667,6 +898,95 @@ class _CommercialScreenState extends State<CommercialScreen> {
       children: [
         Expanded(child: Text(label, style: TextStyle(fontSize: isBold ? 14 : 12, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: isBold ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurfaceVariant))),
         Text('Bs ${value.toStringAsFixed(2)}', style: TextStyle(fontFamily: 'Space Grotesk', fontSize: isBold ? 16 : 14, fontWeight: FontWeight.bold, color: isBold ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurfaceVariant)),
+      ],
+    );
+  }
+}
+
+class _DialogoEdicionTarifas extends StatefulWidget {
+  final double precioKwh;
+  final double precioGnv;
+  final double precioGasolina;
+  final void Function(double kwh, double gnv, double gas) onGuardar;
+
+  const _DialogoEdicionTarifas({
+    required this.precioKwh,
+    required this.precioGnv,
+    required this.precioGasolina,
+    required this.onGuardar,
+  });
+
+  @override
+  State<_DialogoEdicionTarifas> createState() => _DialogoEdicionTarifasState();
+}
+
+class _DialogoEdicionTarifasState extends State<_DialogoEdicionTarifas> {
+  late final TextEditingController _kwhCtrl;
+  late final TextEditingController _gnvCtrl;
+  late final TextEditingController _gasCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _kwhCtrl = TextEditingController(text: widget.precioKwh.toStringAsFixed(2));
+    _gnvCtrl = TextEditingController(text: widget.precioGnv.toStringAsFixed(2));
+    _gasCtrl = TextEditingController(text: widget.precioGasolina.toStringAsFixed(2));
+  }
+
+  @override
+  void dispose() {
+    _kwhCtrl.dispose();
+    _gnvCtrl.dispose();
+    _gasCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+      title: Text('Precios Unitarios', style: TextStyle(fontFamily: 'Space Grotesk', color: Theme.of(context).colorScheme.primary)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _kwhCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(labelText: 'Electricidad (Bs / kWh)', labelStyle: TextStyle(color: Theme.of(context).colorScheme.secondary)),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _gasCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Gasolina (Bs / Litro)', labelStyle: TextStyle(color: Color(0xFFFF1744))),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _gnvCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'GNV (Bs / m³)', labelStyle: TextStyle(color: Color(0xFFFFD600))),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Cancelar', style: TextStyle(color: Theme.of(context).colorScheme.outline)),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            final nuevoKwh = double.tryParse(_kwhCtrl.text.replaceAll(',', '.')) ?? widget.precioKwh;
+            final nuevoGnv = double.tryParse(_gnvCtrl.text.replaceAll(',', '.')) ?? widget.precioGnv;
+            final nuevoGas = double.tryParse(_gasCtrl.text.replaceAll(',', '.')) ?? widget.precioGasolina;
+            widget.onGuardar(nuevoKwh, nuevoGnv, nuevoGas);
+            Navigator.pop(context);
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer, 
+            foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
+          ),
+          child: const Text('Guardar'),
+        ),
       ],
     );
   }

@@ -66,7 +66,7 @@ class CalculatorEngine {
     required double voltaje,
     required bool usarNormaNacional,
   }) {
-    // Calculo Estricto - Tolerancia baja
+    // Calculo estricto conforme a normativa (Seguridad Máxima)
     final strict = _ejecutarAlgoritmo(
       potenciaKw: potenciaKw,
       distanciaM: distanciaM,
@@ -77,7 +77,7 @@ class CalculatorEngine {
       etiqueta: 'RECOMENDADO (Seguridad Máxima)',
     );
 
-    // Calculo Flexible - Tolerancia alta para optimizar costo
+    // Calculo flexible conforme a optimización comercial
     final flexible = _ejecutarAlgoritmo(
       potenciaKw: potenciaKw,
       distanciaM: distanciaM,
@@ -94,22 +94,23 @@ class CalculatorEngine {
   static CalculatorResult _ejecutarAlgoritmo({
     required double potenciaKw,
     required double distanciaM,
-    required int tipoRed, // 0: Monofasica, 1: Trifasica, 2: Delta
+    required int tipoRed, // 0: Monofasica, 1: Trifasica, 2: Delta (Fase-Fase)
     required double voltaje,
     required bool usarNormaNacional,
     required double tolerancia,
     required String etiqueta,
   }) {
     // Corriente Nominal
+    // En Delta (tipoRed == 2) la conexion es entre 2 fases vivas a tension de linea (V_LL): I = P / V
     double corriente = (tipoRed == 1) 
         ? (potenciaKw * 1000) / (voltaje * sqrt(3))
         : (potenciaKw * 1000) / voltaje;
 
-    // Disyuntor (margen de seguridad del 25%)
+    // Disyuntor (estrictamente >= 125% de carga continua segun NB 777 / NEC 625 con margen de tolerancia)
     double corrienteSeguridad = corriente * 1.25;
     int disyuntor = _seleccionarDisyuntorComercial(corrienteSeguridad, tolerancia);
 
-    // seleccion  ampacidad debe ser mayor o igual al disyuntor
+    // seleccion: ampacidad debe ser mayor o igual al disyuntor
     int indexConductor = -1; 
     List<Map<String, dynamic>> tablaActiva = usarNormaNacional ? tablaNB777 : tablaInternacional;
     
@@ -132,17 +133,15 @@ class CalculatorEngine {
     // Caida de Tension
     double caidaPct = _calcularCaidaTension(tipoRed, voltaje, distanciaM, corriente, conductor['mm2']);
 
-    // Bucle de correccion por caida de tension
+    // Bucle de correccion por caida de tension: aumenta la seccion mientras sea > 4.0% hasta agotar la tabla
     while (caidaPct > 4.0 && indexConductor < tablaActiva.length - 1) {
       indexConductor++;
       conductor = tablaActiva[indexConductor];
       caidaPct = _calcularCaidaTension(tipoRed, voltaje, distanciaM, corriente, conductor['mm2']);
     }
-    // La distancia es tanta que ni el cable mas grueso salva la caida de tension
-    if (caidaPct > 4.0) {
-      throw Exception('A ${distanciaM.toInt()} metros, la caída de tensión es crítica incluso con el cable más grueso. Reduzca la distancia o cambie a red trifásica.');
-    }
 
+    // No lanzamos excepcion si caidaPct supera 4.0% al agotar la tabla;
+    // devolvemos el resultado para que la interfaz alerte visualmente via isCaidaCritica.
     return CalculatorResult(
       corrienteA: corriente,
       disyuntorA: disyuntor,
@@ -167,6 +166,8 @@ class CalculatorEngine {
         return valor;
       }
     }
-    return 999;
+    throw Exception(
+      'La corriente de diseño calculada (${corrienteReq.toStringAsFixed(1)} A) supera el catálogo comercial estándar (máx. 125 A). Se requiere diseño de subestación.',
+    );
   }
 }

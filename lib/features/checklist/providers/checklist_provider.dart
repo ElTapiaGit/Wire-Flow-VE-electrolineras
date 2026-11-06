@@ -53,6 +53,12 @@ class ChecklistProvider extends ChangeNotifier {
 
   void refresh() => notifyListeners();
 
+  // Iniciar un nuevo checklist limpio para evitar contaminacion de clientes anteriores
+  void iniciarNuevoChecklist() {
+    _limpiarFormulario();
+    notifyListeners();
+  }
+
   // METODO edit datos de borrador
   void cargadorBorrador(CertificacionesChecklistData registro) {
     currentInstalacionId = registro.instalacionId;
@@ -87,17 +93,23 @@ class ChecklistProvider extends ChangeNotifier {
 
   // Validador global estricto
   bool get isChecklistComplete {
-    bool tierraOk = true; 
-    if (tierraController.text.isNotEmpty) {
-      double tierra = double.tryParse(tierraController.text) ?? 999.0;
-      tierraOk = (tierra <= 25.0);
-    }
-    bool tensionOk = tensionController.text.isNotEmpty;
+    // 1. Tensión operativa: sanitizar y verificar rango 180V - 460V
+    final tensionStr = tensionController.text.trim().replaceAll(',', '.');
+    final tension = double.tryParse(tensionStr);
+    final bool tensionOk = tension != null && tension >= 180.0 && tension <= 460.0;
 
-    bool visualOk = visFijacion && visCables && visProteccion && visIdentificacion && visDanos;
-    bool electricasOk = tensionOk && tierraOk && elecContinuidad;
-    bool finalesOk = funEncendido && funCorriente && funTemperatura && funEmergencia;
-    bool docsOk = docFoto && docDiagrama && docCertificado && docManual;
+    // 2. Resistencia de puesta a tierra: si contiene texto debe ser estrictamente > 0.0 y <= 25.0
+    final tierraStr = tierraController.text.trim().replaceAll(',', '.');
+    bool tierraOk = true; 
+    if (tierraStr.isNotEmpty) {
+      final tierra = double.tryParse(tierraStr);
+      tierraOk = tierra != null && tierra > 0.0 && tierra <= 25.0;
+    }
+
+    final bool visualOk = visFijacion && visCables && visProteccion && visIdentificacion && visDanos;
+    final bool electricasOk = tensionOk && tierraOk && elecContinuidad;
+    final bool finalesOk = funEncendido && funCorriente && funTemperatura && funEmergencia;
+    final bool docsOk = docFoto && docDiagrama && docCertificado && docManual;
     
     return visualOk && electricasOk && finalesOk && docsOk;
   }
@@ -117,6 +129,9 @@ class ChecklistProvider extends ChangeNotifier {
       } else {
         idToUse = await _db.crearInstalacion('Certificación: $nombreCliente'); // Creamos uno nuevo
       }
+
+      final tensionStr = tensionController.text.trim().replaceAll(',', '.');
+      final tierraStr = tierraController.text.trim().replaceAll(',', '.');
 
       // Preparamos el Companion
       final nuevoCertificado = CertificacionesChecklistCompanion.insert(
@@ -140,8 +155,8 @@ class ChecklistProvider extends ChangeNotifier {
         docCertificadoTierra: drift.Value(docCertificado),
         docManual: drift.Value(docManual),
         
-        tensionMedidaV: drift.Value(double.tryParse(tensionController.text)),
-        resistenciaTierraOhms: drift.Value(double.tryParse(tierraController.text)),
+        tensionMedidaV: drift.Value(double.tryParse(tensionStr)),
+        resistenciaTierraOhms: drift.Value(double.tryParse(tierraStr)),
         
         isCompletado: drift.Value(isReady),
         fechaRegistro: DateTime.now(),
@@ -158,6 +173,10 @@ class ChecklistProvider extends ChangeNotifier {
 
   void _limpiarFormulario() {
     currentInstalacionId = null;
+    nombreClienteGuardado = '';
+    ciNitClienteGuardado = '';
+    direccionGuardada = '';
+
     visFijacion = false; visCables = false; visProteccion = false; 
     visIdentificacion = false; visDanos = false; elecContinuidad = false;
     funEncendido = false; funCorriente = false; funTemperatura = false; 
@@ -168,6 +187,9 @@ class ChecklistProvider extends ChangeNotifier {
   }
 
   CertificacionesChecklistData crearRegistroTemporal({required String nombreCliente, required String ciNitCliente, required String direccion}) {
+    final tensionStr = tensionController.text.trim().replaceAll(',', '.');
+    final tierraStr = tierraController.text.trim().replaceAll(',', '.');
+
     return CertificacionesChecklistData(
       id: currentInstalacionId ?? 0, 
       instalacionId: currentInstalacionId ?? 0, 
@@ -179,8 +201,8 @@ class ChecklistProvider extends ChangeNotifier {
       visProteccion: visProteccion, 
       visIdentificacion: visIdentificacion, 
       visDanos: visDanos, 
-      tensionMedidaV: double.tryParse(tensionController.text), 
-      resistenciaTierraOhms: double.tryParse(tierraController.text), 
+      tensionMedidaV: double.tryParse(tensionStr), 
+      resistenciaTierraOhms: double.tryParse(tierraStr), 
       elecContinuidad: elecContinuidad, 
       funEncendido: funEncendido, 
       funCorriente: funCorriente, 

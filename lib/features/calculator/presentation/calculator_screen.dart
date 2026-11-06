@@ -14,7 +14,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
   bool _isCalculating = false;
 
   int _selectedNetworkIndex = 0; 
-  double _voltajeMono = 230.0;
+  double _voltajeMono = 220.0;
   double _voltajeTri = 400.0;
   double _voltajeDelta = 230.0;
   bool _usarNormaNacional = false; 
@@ -108,35 +108,43 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
             children: [
               TextField(
                 controller: monoCtrl,
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(labelText: 'Monofásica (V)', labelStyle: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: triCtrl,
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(labelText: 'Trifásica (V)', labelStyle: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: deltaCtrl,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: 'Delta (V)', labelStyle: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(labelText: 'Delta (2 Fases sin neutro) (V)', labelStyle: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ),
             ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () {
+                monoCtrl.dispose();
+                triCtrl.dispose();
+                deltaCtrl.dispose();
+                Navigator.pop(context);
+              },
               child: Text('Cancelar', style: TextStyle(color: Theme.of(context).colorScheme.outline)),
             ),
             ElevatedButton(
               onPressed: () {
                 setState(() {
-                  _voltajeMono = double.tryParse(monoCtrl.text) ?? _voltajeMono;
-                  _voltajeTri = double.tryParse(triCtrl.text) ?? _voltajeTri;
-                  _voltajeDelta = double.tryParse(deltaCtrl.text) ?? _voltajeDelta;
+                  _voltajeMono = double.tryParse(monoCtrl.text.replaceAll(',', '.')) ?? _voltajeMono;
+                  _voltajeTri = double.tryParse(triCtrl.text.replaceAll(',', '.')) ?? _voltajeTri;
+                  _voltajeDelta = double.tryParse(deltaCtrl.text.replaceAll(',', '.')) ?? _voltajeDelta;
                 });
+                monoCtrl.dispose();
+                triCtrl.dispose();
+                deltaCtrl.dispose();
                 Navigator.pop(context);
               },
               style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primaryContainer, foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer),
@@ -308,10 +316,58 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
   }
 
   void _ejecutarCalculo() async {
-    if (_potenciaController.text.isEmpty || _distanciaController.text.isEmpty) return;
+    final potenciaTexto = _potenciaController.text.trim().replaceAll(',', '.');
+    final distanciaTexto = _distanciaController.text.trim().replaceAll(',', '.');
 
-    final double potencia = double.parse(_potenciaController.text);
-    final double distancia = double.parse(_distanciaController.text);
+    if (potenciaTexto.isEmpty || distanciaTexto.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Por favor ingresa la potencia del cargador y la distancia del tablero.',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final double? potencia = double.tryParse(potenciaTexto);
+    final double? distancia = double.tryParse(distanciaTexto);
+
+    if (potencia == null || distancia == null || potencia <= 0 || distancia <= 0) {
+      FocusScope.of(context).unfocus();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Valores inválidos: La potencia (kW) y la distancia (m) deben ser números mayores a cero.',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     if (potencia > 22.0) {
       FocusScope.of(context).unfocus();
@@ -325,6 +381,31 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
               Expanded(
                 child: Text(
                   'POTENCIA FUERA DE RANGO:\nLos cargadores mayores a 22 kW son de Corriente Continua (DC - Nivel 3). Requieren diseño de subestación.',
+                  style: TextStyle(fontFamily: 'Space Grotesk', fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          duration: const Duration(seconds: 6),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return; 
+    }
+
+    if (distancia > 100.0) {
+      FocusScope.of(context).unfocus();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'DISTANCIA FUERA DE RANGO RESIDENCIAL: La distancia máxima recomendada entre el medidor de la acometida y la estación de carga es de 100 metros. Verifique el recorrido.',
                   style: TextStyle(fontFamily: 'Space Grotesk', fontWeight: FontWeight.bold),
                 ),
               ),
@@ -682,6 +763,50 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                       );
                     }
                   ),
+                  if (strict.isCaidaCritica) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.error.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Theme.of(context).colorScheme.error),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: Theme.of(context).colorScheme.error, size: 24),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'ADVERTENCIA: CAÍDA DE TENSIÓN CRÍTICA (${strict.caidaTensionPct.toStringAsFixed(2)}%)',
+                                  style: TextStyle(
+                                    fontFamily: 'Space Grotesk',
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'La caída de tensión supera el 4.0% admisible por norma técnica (NB 777 / IEC) incluso empleando el conductor de máxima capacidad comercial (${strict.calibreAwg} AWG / ${strict.seccionCableMm2} mm²). Se recomienda reducir la distancia del circuito o evaluar una alimentación en red trifásica.',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Theme.of(context).colorScheme.onSurface,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   
                   SizedBox(
@@ -850,20 +975,22 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
   }
 
   Widget _buildProtectionsTimelineCard(CalculatorResult strict, CalculatorResult flex) {
-    final String polos = _selectedNetworkIndex == 1 ? '4' : '2';
+    final String tipoPolos = _selectedNetworkIndex == 1 ? 'Tetrapolar' : 'Bipolar';
 
-    Widget buildProteccionTexto(String suffix) {
+    Widget buildProteccionTexto(String suffix, {bool isMcb = false}) {
+      final String mcbLabel = isMcb ? ' (Curva C)' : '';
       if (strict.disyuntorA == flex.disyuntorA) {
-        return Text('${polos}x${flex.disyuntorA}A$suffix', 
+        return Text('$tipoPolos ${flex.disyuntorA}A$mcbLabel$suffix', 
             style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 13, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.tertiary));
       } else {
+        final String mcbDualTag = isMcb ? ' (Curva C)' : '';
         return RichText(
           text: TextSpan(
             style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 13, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.tertiary),
             children: [
-              TextSpan(text: '${polos}x${flex.disyuntorA}A  •  '),
+              TextSpan(text: '$tipoPolos ${flex.disyuntorA}A$mcbDualTag  •  '),
               TextSpan(
-                text: '${polos}x${strict.disyuntorA}A (Rec)', 
+                text: '$tipoPolos ${strict.disyuntorA}A$mcbDualTag (Rec)', 
                 style: TextStyle(color: Theme.of(context).colorScheme.secondary, fontWeight: FontWeight.w900) 
               ),
               if (suffix.isNotEmpty) TextSpan(text: suffix),
@@ -919,7 +1046,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
             step: '2',
             title: 'Termomagnético (MCB)',
             subtitle: 'Protege la línea y equipos aguas abajo de cortocircuitos.',
-            specWidget: buildProteccionTexto(''),
+            specWidget: buildProteccionTexto('', isMcb: true),
           ),
           Padding(
             padding: EdgeInsets.only(left: 11.0),
@@ -939,7 +1066,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
             step: '4',
             title: 'Relé de Tensión (OVP/UVP)',
             subtitle: 'Corta si el voltaje sube o baja de rangos seguros de operación.',
-            specWidget: Text('${polos}x${flex.disyuntorA}A  •  Monitoreo',
+            specWidget: Text('$tipoPolos ${flex.disyuntorA}A  •  Monitoreo',
             style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 13, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.tertiary)),
           ),
         ],
