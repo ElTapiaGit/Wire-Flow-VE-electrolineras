@@ -81,7 +81,31 @@ WireFlow VE es una aplicación móvil offline-first orientada a instaladores ele
 
 ---
 
-## Instalación y Ejecución
+## Acceso a la Versión de Prueba (Google Play Closed Testing)
+
+La aplicación se encuentra actualmente en fase de **Prueba Cerrada** en Google Play Console para evaluadores e instaladores técnicos en Bolivia.
+
+> **Disponibilidad regional:** La aplicación está disponible exclusivamente para cuentas de Google Play configuradas en la región de **Bolivia**.
+
+Para instalar y evaluar la aplicación en un dispositivo Android, siga los siguientes pasos:
+
+1. **Unirse al grupo de evaluadores (Obligatorio):**  
+   Ingrese con la misma cuenta de Google asociada a su dispositivo móvil Android y seleccione **"Unirse al grupo"**:  
+   * [Grupo de Google: Testers Wire Flow VE](https://groups.google.com/g/testers-wire-flow-ve)
+
+2. **Aceptar la invitación de prueba en Google Play:**  
+   Una vez dentro del grupo, abra el enlace de registro de evaluadores y presione **"Convertirse en verificador" (Become a tester)**:  
+   * [Aceptar invitación de prueba en Google Play](https://play.google.com/apps/testing/com.jhones.wireflow_ve)
+
+3. **Descargar la aplicación desde Google Play Store:**  
+   Tras aceptar la invitación, descargue e instale la aplicación directamente desde la tienda en su dispositivo Android:  
+   * [Descargar WireFlow VE en Google Play Store](https://play.google.com/store/apps/details?id=com.jhones.wireflow_ve)
+
+> **Nota técnica:** Si accede directamente al enlace de la Play Store sin haberse unido previamente al Grupo de Google de evaluadores, la tienda mostrará un error indicando que la aplicación no existe o no está disponible para su cuenta.
+
+---
+
+## Instalación y Ejecución (Código Fuente)
 
 ### Prerrequisitos
 * [Flutter SDK](https://docs.flutter.dev/get-started/install) (versión 3.8.1 o superior).
