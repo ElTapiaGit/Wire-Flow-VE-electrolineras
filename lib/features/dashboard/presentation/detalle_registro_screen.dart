@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart'; 
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/database/app_database.dart'; 
 import '../../../core/services/pdf_service.dart'; 
 import 'package:provider/provider.dart';
@@ -10,6 +11,28 @@ class PantallaDetalleRegistro extends StatelessWidget {
   final CertificacionesChecklistData registro;
   
   const PantallaDetalleRegistro({super.key, required this.registro});
+
+  Future<void> _compartirActaPdf(CertificacionesChecklistData registroActualizado) async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? savedTecnico = prefs.getString('cfg_nombre_tecnico');
+    final String? savedSib = prefs.getString('cfg_registro_sib');
+
+    final String tecnico = (savedTecnico != null && savedTecnico.trim().isNotEmpty)
+        ? savedTecnico.trim()
+        : 'Instalador Especialista en Electromovilidad';
+    final String? matricula = (savedSib != null && savedSib.trim().isNotEmpty)
+        ? savedSib.trim()
+        : null;
+
+    final bool medicionExterna = registroActualizado.resistenciaTierraOhms == null && registroActualizado.docCertificadoTierra;
+
+    await PdfService.generarCertificado(
+      registroActualizado,
+      nombreTecnico: tecnico,
+      registroSib: matricula,
+      medicionTierraExterna: medicionExterna,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -105,7 +128,14 @@ class PantallaDetalleRegistro extends StatelessWidget {
             
             _buildDataRow(context, 'Tensión Medida', registroActualizado.tensionMedidaV != null ? '${registroActualizado.tensionMedidaV} V' : 'No registrada', Icons.electrical_services),
             const Divider(height: 1),
-            _buildDataRow(context, 'Puesta a Tierra', registroActualizado.resistenciaTierraOhms != null ? '${registroActualizado.resistenciaTierraOhms} Ω' : 'No registrada', Icons.sensors),
+            _buildDataRow(
+              context,
+              'Puesta a Tierra',
+              registroActualizado.resistenciaTierraOhms != null
+                  ? '${registroActualizado.resistenciaTierraOhms} Ω'
+                  : (registroActualizado.docCertificadoTierra ? 'Delegada a especialista' : 'No registrada'),
+              Icons.sensors,
+            ),
             const Divider(height: 1),
             _buildDataRow(context, 'Pruebas Operativas', registroActualizado.funEncendido && registroActualizado.funCorriente ? 'Aprobadas' : 'Incompletas', Icons.check_circle_outline),
           ],
@@ -157,24 +187,24 @@ class PantallaDetalleRegistro extends StatelessWidget {
                 height: 52,
                 child: isCertificado 
                   ? ElevatedButton.icon(
-                      onPressed: () async => await PdfService.generarCertificado(registroActualizado),
+                      onPressed: () async => await _compartirActaPdf(registroActualizado),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).colorScheme.secondary,
                         foregroundColor: Theme.of(context).colorScheme.surface, // Texto oscuro o claro según el tema
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       icon: const Icon(Icons.picture_as_pdf),
-                      label: const Text('GENERAR ACTA EN PDF', style: TextStyle(fontFamily: 'Space Grotesk', fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+                      label: const Text('COMPARTIR ACTA (PDF)', style: TextStyle(fontFamily: 'Space Grotesk', fontWeight: FontWeight.bold, letterSpacing: 1.0)),
                     )
                   : OutlinedButton.icon(
-                      onPressed: () async => await PdfService.generarCertificado(registroActualizado),
+                      onPressed: () async => await _compartirActaPdf(registroActualizado),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Theme.of(context).colorScheme.primary,
                         side: BorderSide(color: Theme.of(context).colorScheme.primary),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       icon: const Icon(Icons.picture_as_pdf),
-                      label: const Text('PREVISUALIZAR BORRADOR', style: TextStyle(fontFamily: 'Space Grotesk', fontWeight: FontWeight.bold)),
+                      label: const Text('PREVISUALIZAR BORRADOR (PDF)', style: TextStyle(fontFamily: 'Space Grotesk', fontWeight: FontWeight.bold)),
                     ),
               ),
 

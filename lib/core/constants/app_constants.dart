@@ -37,5 +37,12 @@ class AppConstants {
   static const double consumoEvKwhPorKm = 0.15;     // 15 kWh / 100km
   static const double consumoGasolinaKmPorL = 10.0; // 10 km por Litro
   static const double consumoGnvKmPorM3 = 12.0;     // 12 km por m3
-  
+
+  // PARÁMETROS NORMATIVOS (AETN Nº 479/2021 y NB 777)
+  static const double alturaMontajeMinM = 0.60;
+  static const double alturaMontajeMaxM = 1.30;
+  static const double resistenciaTierraOptimaOhms = 10.0;
+  static const double resistenciaTierraMaximaOhms = 25.0;
+  static const double tensionMinimaOperativaV = 180.0;
+  static const double tensionMaximaOperativaV = 460.0;
 }

@@ -113,10 +113,10 @@ class PdfService {
 
             // Bloque ROI
             _buildBloqueRoi(ahorroMensualVsGasolina, ahorroAnualVsGasolina, totalEstimado),
-            pw.SizedBox(height: 16),
+            pw.SizedBox(height: 14),
 
-            // Términos y Firmas
-            _buildTerminosYFirmas(),
+            // Pie de página corporativo (Términos, Garantía y Nota Técnica)
+            _buildPiePaginaCorporativo(),
           ];
         },
       ),
@@ -320,115 +320,251 @@ class PdfService {
     );
   }
 
-  static pw.Widget _buildTerminosYFirmas() {
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Text(
-          'Términos Comerciales: Oferta válida por 15 días calendario a partir de su emisión. Garantía de 1 año sobre la instalación eléctrica y mano de obra. Todo el montaje cumple las directrices técnicas de la Norma Boliviana NB 777 e IEC 61851-1.',
-          style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700),
-          textAlign: pw.TextAlign.justify,
-        ),
-        pw.SizedBox(height: 28),
-        pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
-          children: [
-            pw.Column(
-              children: [
-                pw.Container(width: 150, height: 0.8, color: PdfColors.black),
-                pw.SizedBox(height: 3),
-                pw.Text('Firma del Técnico Instalador', style: const pw.TextStyle(fontSize: 8)),
-                pw.Text('WireFlow VE — Certificación', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
-              ],
+  static pw.Widget _buildPiePaginaCorporativo() {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(10),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.grey100,
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+        border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            'CONDICIONES COMERCIALES Y GARANTÍA TÉCNICA',
+            style: pw.TextStyle(
+              fontSize: 8.5,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.blue900,
             ),
-            pw.Column(
-              children: [
-                pw.Container(width: 150, height: 0.8, color: PdfColors.black),
-                pw.SizedBox(height: 3),
-                pw.Text('Aceptación y Conformidad (Cliente)', style: const pw.TextStyle(fontSize: 8)),
-                pw.Text('Aprobación de Presupuesto', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
-              ],
-            ),
-          ],
-        ),
-      ],
+          ),
+          pw.SizedBox(height: 5),
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Container(
+                width: 4,
+                height: 4,
+                margin: const pw.EdgeInsets.only(top: 3, right: 6),
+                decoration: const pw.BoxDecoration(
+                  color: PdfColors.blue900,
+                  shape: pw.BoxShape.circle,
+                ),
+              ),
+              pw.Expanded(
+                child: pw.RichText(
+                  text: pw.TextSpan(
+                    style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey800),
+                    children: [
+                      pw.TextSpan(text: 'Términos de validez: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.black)),
+                      const pw.TextSpan(text: 'Oferta formal válida por 15 días calendario a partir de su emisión.'),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 3),
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Container(
+                width: 4,
+                height: 4,
+                margin: const pw.EdgeInsets.only(top: 3, right: 6),
+                decoration: const pw.BoxDecoration(
+                  color: PdfColors.blue900,
+                  shape: pw.BoxShape.circle,
+                ),
+              ),
+              pw.Expanded(
+                child: pw.RichText(
+                  text: pw.TextSpan(
+                    style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey800),
+                    children: [
+                      pw.TextSpan(text: 'Garantía de instalación: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.black)),
+                      const pw.TextSpan(text: 'Garantía de 1 año calendario sobre la mano de obra calificada y conexionado eléctrico.'),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 3),
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Container(
+                width: 4,
+                height: 4,
+                margin: const pw.EdgeInsets.only(top: 3, right: 6),
+                decoration: const pw.BoxDecoration(
+                  color: PdfColors.blue900,
+                  shape: pw.BoxShape.circle,
+                ),
+              ),
+              pw.Expanded(
+                child: pw.RichText(
+                  text: pw.TextSpan(
+                    style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey800),
+                    children: [
+                      pw.TextSpan(text: 'Nota de ingeniería: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.black)),
+                      const pw.TextSpan(text: 'Montaje ejecutado bajo directrices técnicas de la Norma Boliviana NB 777 y estándar internacional IEC 61851-1.'),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
-  static Future<void> generarCertificado(CertificacionesChecklistData registro) async {
+  static Future<void> generarCertificado(
+    CertificacionesChecklistData registro, {
+    String esquemaTierra = 'TN-S',
+    String distribuidora = 'ELFEC',
+    String? nombreTecnico,
+    String? registroSib,
+    bool medicionTierraExterna = false,
+  }) async {
     final pdf = pw.Document();
 
     // Formateador de fecha
     final fechaFormat = DateFormat('dd/MM/yyyy HH:mm');
     final fechaStr = fechaFormat.format(registro.fechaRegistro);
 
+    // Formateo de datos del técnico responsable
+    final String textoTecnico = (nombreTecnico != null && nombreTecnico.trim().isNotEmpty)
+        ? 'Técnico Responsable: ${nombreTecnico.trim()}${(registroSib != null && registroSib.trim().isNotEmpty) ? ' • Matrícula/SIB: ${registroSib.trim()}' : ''}'
+        : 'Técnico Responsable: Instalador Especialista en Electromovilidad${(registroSib != null && registroSib.trim().isNotEmpty) ? ' • Matrícula/SIB: ${registroSib.trim()}' : ''}';
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(40),
+        margin: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 32),
         build: (pw.Context context) {
+          final bool isTierraPropia = !medicionTierraExterna && registro.resistenciaTierraOhms != null;
+          final String valorTierra = registro.resistenciaTierraOhms != null
+              ? (registro.resistenciaTierraOhms! == registro.resistenciaTierraOhms!.roundToDouble()
+                  ? registro.resistenciaTierraOhms!.toInt().toString()
+                  : registro.resistenciaTierraOhms!.toString())
+              : '0';
+
+          final String textoPAT;
+          final bool checkPAT;
+
+          if (medicionTierraExterna) {
+            textoPAT = 'Resistencia de puesta a tierra: Delegada a especialista técnico (Pendiente de verificación con telurómetro)';
+            checkPAT = true;
+          } else if (isTierraPropia) {
+            textoPAT = 'Resistencia de puesta a tierra: $valorTierra Ohms (Conforme NB 777 <= 25 Ohms)';
+            checkPAT = true;
+          } else {
+            textoPAT = 'Resistencia de puesta a tierra: No registrada';
+            checkPAT = false;
+          }
+
           return [
             _buildHeader(fechaStr),
-            pw.SizedBox(height: 20),
-            _buildDatosCliente(registro),
-            pw.SizedBox(height: 24),
+            pw.SizedBox(height: 14),
+            _buildDatosCliente(
+              registro,
+              esquemaTierra: esquemaTierra,
+              distribuidora: distribuidora,
+              textoTecnico: textoTecnico,
+            ),
+            pw.SizedBox(height: 16),
             
             // TITULO DEL REPORTE
-            pw.Text('ACTA DE PUESTA EN MARCHA Y CERTIFICACIÓN', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
-            pw.Divider(thickness: 2, color: PdfColors.blue900),
-            pw.SizedBox(height: 16),
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+              decoration: const pw.BoxDecoration(
+                color: PdfColors.blue900,
+                borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+              ),
+              child: pw.Text(
+                'ACTA DE PUESTA EN MARCHA Y CERTIFICACIÓN TÉCNICA (AETN 479/2021)',
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.white,
+                ),
+                textAlign: pw.TextAlign.center,
+              ),
+            ),
+            pw.SizedBox(height: 12),
 
-            // 1. INSPECCION VISUAL
-            _buildSeccionTitulo('1. Inspección Visual'),
-            _buildCheckItem('Fijación firme del Wallbox y accesorios', registro.visFijacion),
-            _buildCheckItem('Ruta de cables continua y organizada', registro.visCables),
-            _buildCheckItem('Protección mecánica (ductos, bandejas)', registro.visProteccion),
-            _buildCheckItem('Identificación de tableros y disyuntores', registro.visIdentificacion),
-            _buildCheckItem('Ausencia de daños físicos en el equipo', registro.visDanos),
-            pw.SizedBox(height: 16),
+            // 1. INSPECCION VISUAL Y MONTAJE
+            _buildSeccionTitulo('1. Inspección Visual y Montaje Físico (AETN Nº 479/2021)'),
+            _buildCheckItem('Fijación sólida y altura reglamentaria (0.60 m a 1.30 m s.n.p.t.)', registro.visFijacion),
+            _buildCheckItem('Envolvente con grado de protección adecuado (Mínimo IP54 intemperie / IP44 interior)', registro.visDanos),
+            _buildCheckItem('Canalización continua en ducto rígido/reforzado (sin cables en contacto con suelo)', registro.visCables),
+            _buildCheckItem('Tablero exclusivo rotulado y disyuntor termomagnético Curva C', registro.visIdentificacion),
+            _buildCheckItem('Protección contra sobretensiones transitorias (DPS / SPD Clase II conectado a PAT)', registro.visProteccion),
+            pw.SizedBox(height: 10),
 
             // 2. PRUEBAS ELECTRICAS
-            _buildSeccionTitulo('2. Pruebas Eléctricas'),
-            _buildCheckItem('Tensión medida en el punto: ${registro.tensionMedidaV ?? 'N/A'} V', registro.tensionMedidaV != null),
-            _buildCheckItem('Resistencia de puesta a tierra: ${registro.resistenciaTierraOhms != null ? '${registro.resistenciaTierraOhms} Ohms' : 'N/A'}', registro.resistenciaTierraOhms != null),
-            _buildCheckItem('Continuidad verificada (Fase, Neutro, Tierra)', registro.elecContinuidad),
-            pw.SizedBox(height: 16),
+            _buildSeccionTitulo('2. Pruebas Eléctricas y Seguridad de Personas (NB 777)'),
+            _buildCheckItem('Interruptor Diferencial exclusivo Tipo A 30mA instalado (prohibido Tipo AC)', registro.visProteccion),
+            _buildCheckItem('Tensión nominal medida en el punto: ${registro.tensionMedidaV != null ? '${registro.tensionMedidaV!.toStringAsFixed(1)} V' : 'N/A'} (180V - 460V)', registro.tensionMedidaV != null),
+            _buildCheckItem(textoPAT, checkPAT),
+            _buildCheckItem('Continuidad verificada en conductores activos y barra equipotencial de tierra', registro.elecContinuidad),
+            pw.SizedBox(height: 10),
 
             // 3. PRUEBAS FINALES
-            _buildSeccionTitulo('3. Pruebas Finales y Operación'),
-            _buildCheckItem('Encendido del Wallbox sin errores', registro.funEncendido),
-            _buildCheckItem('Verificación de corriente real de carga', registro.funCorriente),
-            _buildCheckItem('Temperatura operativa en parámetros normales', registro.funTemperatura),
-            _buildCheckItem('Prueba de parada de emergencia (si aplica)', registro.funEmergencia),
-            pw.SizedBox(height: 16),
+            _buildSeccionTitulo('3. Pruebas Funcionales y Puesta en Marcha con EV'),
+            _buildCheckItem('Encendido de Wallbox y comprobación de secuencia de control sin errores', registro.funEncendido),
+            _buildCheckItem('Verificación de corriente real de carga mediante pinza amperimétrica', registro.funCorriente),
+            _buildCheckItem('Control térmico operativo en bornes tras prueba de carga continua (<= 60°C)', registro.funTemperatura),
+            _buildCheckItem('Mecanismo de parada de emergencia verificado y operativo (si aplica)', registro.funEmergencia),
+            pw.SizedBox(height: 10),
 
             // 4. DOCUMENTACION
-            _buildSeccionTitulo('4. Documentación Entregada'),
-            _buildCheckItem('Registro fotográfico de la instalación', registro.docFoto),
-            _buildCheckItem('Diagrama unifilar del circuito', registro.docDiagrama),
-            _buildCheckItem('Certificado de medición de PAT', registro.docCertificadoTierra),
-            _buildCheckItem('Manuales del equipo entregados al usuario', registro.docManual),
+            _buildSeccionTitulo('4. Documentación y Protocolo de Entrega'),
+            _buildCheckItem('Registro fotográfico de la estación de carga y tablero secundario', registro.docFoto),
+            _buildCheckItem('Diagrama unifilar del circuito terminal dedicado', registro.docDiagrama),
+            _buildCheckItem('Constancia o certificado de medición de resistencia de puesta a tierra (PAT)', registro.docCertificadoTierra),
+            _buildCheckItem('Manual del fabricante y recomendaciones operativas entregadas al usuario', registro.docManual),
             
-            pw.SizedBox(height: 40),
+            pw.SizedBox(height: 16),
             
-            // DECLARACION Y FIRMAS
-            pw.Text(
-              'Por medio de la presente acta, se certifica que la estación de carga para vehículo eléctrico ha sido instalada y probada cumpliendo con los estándares técnicos vigentes. El cliente declara conformidad con el trabajo realizado y recibe las instrucciones de uso operativo.',
-              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey800),
-              textAlign: pw.TextAlign.justify,
+            // DECLARACION LEGAL Y GARANTIA (Sin bloque de firmas requerido)
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey100,
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text('DECLARACIÓN DE CUMPLIMIENTO TÉCNICO Y GARANTÍA', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    'Se certifica que la estación de recarga de vehículos eléctricos descrita en la presente acta ha sido instalada y probada cumpliendo los preceptos de seguridad técnica de la Norma Boliviana NB 777, la Resolución Regulatoria AETN Nº 479/2021 y el estándar internacional IEC 61851-1. Garantía de 1 año calendario sobre la mano de obra calificada.',
+                    style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey800),
+                    textAlign: pw.TextAlign.justify,
+                  ),
+                ],
+              ),
             ),
-            pw.SizedBox(height: 60),
-            _buildFirmas(),
           ];
         },
       ),
     );
 
-    // Lanzar la vista previa 
+    // Compartir mediante el diálogo nativo (WhatsApp, Correo, Almacenamiento)
     final cleanClientName = registro.nombreCliente.replaceAll(RegExp(r'[^\w\-]'), '_');
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'Certificado_$cleanClientName.pdf',
+    final cleanFecha = fechaStr.replaceAll('/', '-').replaceAll(':', '-').replaceAll(' ', '_');
+    final Uint8List bytes = await pdf.save();
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'Acta_Certificacion_${cleanClientName}_$cleanFecha.pdf',
     );
   }
 
@@ -440,45 +576,81 @@ class PdfService {
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Text('WIIRE FLOW VE', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
-            pw.Text('Ingeniería y Electromovilidad', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+            pw.Text('WIRE FLOW VE', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+            pw.Text('Ingeniería y Electromovilidad Bolivia', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+            pw.Text('Resolución Regulatoria AETN Nº 479/2021 — Norma NB 777', style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey600)),
           ],
         ),
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.end,
           children: [
-            pw.Text('Fecha: $fecha', style: const pw.TextStyle(fontSize: 10)),
-            pw.Text('Bolivia', style: const pw.TextStyle(fontSize: 10)),
+            pw.Text('Fecha: $fecha', style: const pw.TextStyle(fontSize: 9)),
+            pw.Text('Bolivia', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
           ],
         ),
       ],
     );
   }
 
-  static pw.Widget _buildDatosCliente(CertificacionesChecklistData registro) {
+  static pw.Widget _buildDatosCliente(
+    CertificacionesChecklistData registro, {
+    required String esquemaTierra,
+    required String distribuidora,
+    required String textoTecnico,
+  }) {
     return pw.Container(
-      padding: const pw.EdgeInsets.all(12),
+      padding: const pw.EdgeInsets.all(10),
       decoration: pw.BoxDecoration(
         color: PdfColors.grey100,
         borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-        border: pw.Border.all(color: PdfColors.grey400),
+        border: pw.Border.all(color: PdfColors.grey400, width: 0.6),
       ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text('DATOS DEL CLIENTE E INSTALACIÓN', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 8),
           pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Expanded(child: pw.Text('Cliente: ${registro.nombreCliente}', style: const pw.TextStyle(fontSize: 11))),
-              pw.Expanded(child: pw.Text('CI / NIT: ${registro.ciNitCliente.isEmpty ? 'N/A' : registro.ciNitCliente}', style: const pw.TextStyle(fontSize: 11))),
+              pw.Text('DATOS DEL CLIENTE, SUMINISTRO Y TÉCNICO RESPONSABLE', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: pw.BoxDecoration(
+                  color: registro.isCompletado ? PdfColors.green100 : PdfColors.orange100,
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                  border: pw.Border.all(color: registro.isCompletado ? PdfColors.green800 : PdfColors.orange800, width: 0.5),
+                ),
+                child: pw.Text(
+                  registro.isCompletado ? 'CERTIFICADO CONFORME' : 'BORRADOR PENDIENTE',
+                  style: pw.TextStyle(
+                    fontSize: 7.5,
+                    fontWeight: pw.FontWeight.bold,
+                    color: registro.isCompletado ? PdfColors.green900 : PdfColors.orange900,
+                  ),
+                ),
+              ),
             ],
           ),
-          pw.SizedBox(height: 4),
-          pw.Text('Ubicación: ${registro.direccionInstalacion}', style: const pw.TextStyle(fontSize: 11)),
-          pw.SizedBox(height: 4),
-          pw.Text('Estado: ${registro.isCompletado ? 'Certificado Exitoso' : 'Registro Pendiente'}', 
-            style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: registro.isCompletado ? PdfColors.green700 : PdfColors.orange700)),
+          pw.SizedBox(height: 6),
+          pw.Row(
+            children: [
+              pw.Expanded(child: pw.Text('Cliente: ${registro.nombreCliente}', style: const pw.TextStyle(fontSize: 8.5))),
+              pw.Expanded(child: pw.Text('CI / NIT: ${registro.ciNitCliente.isEmpty ? 'N/A' : registro.ciNitCliente}', style: const pw.TextStyle(fontSize: 8.5))),
+            ],
+          ),
+          pw.SizedBox(height: 3),
+          pw.Row(
+            children: [
+              pw.Expanded(child: pw.Text('Ubicación: ${registro.direccionInstalacion}', style: const pw.TextStyle(fontSize: 8.5))),
+              pw.Expanded(child: pw.Text('Distribuidora: $distribuidora', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold))),
+            ],
+          ),
+          pw.SizedBox(height: 3),
+          pw.Row(
+            children: [
+              pw.Expanded(child: pw.Text('Esquema de Tierra (PAT): $esquemaTierra (NB 777)', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold))),
+              pw.Expanded(child: pw.Text(textoTecnico, style: const pw.TextStyle(fontSize: 8))),
+            ],
+          ),
         ],
       ),
     );
@@ -512,25 +684,4 @@ class PdfService {
     );
   }
 
-  static pw.Widget _buildFirmas() {
-    return pw.Row(
-      mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
-      children: [
-        pw.Column(
-          children: [
-            pw.Container(width: 150, height: 1, color: PdfColors.black),
-            pw.SizedBox(height: 4),
-            pw.Text('Firma del Técnico Instalador', style: const pw.TextStyle(fontSize: 10)),
-          ],
-        ),
-        pw.Column(
-          children: [
-            pw.Container(width: 150, height: 1, color: PdfColors.black),
-            pw.SizedBox(height: 4),
-            pw.Text('Firma de Conformidad (Cliente)', style: const pw.TextStyle(fontSize: 10)),
-          ],
-        ),
-      ],
-    );
-  }
 }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/constants/app_constants.dart';
 import '../providers/checklist_provider.dart';
 import '../../../core/services/pdf_service.dart';
 
@@ -7,6 +9,16 @@ class ChecklistScreen extends StatelessWidget {
   const ChecklistScreen({super.key});
 
   void _generarPDF(BuildContext context, ChecklistProvider provider) async {
+    final prefs = await SharedPreferences.getInstance();
+    String tecnico = provider.tecnicoResponsable.trim();
+    String matricula = provider.matriculaProfesional.trim();
+    if (tecnico.isEmpty) {
+      tecnico = prefs.getString('cfg_nombre_tecnico')?.trim() ?? '';
+    }
+    if (matricula.isEmpty) {
+      matricula = prefs.getString('cfg_registro_sib')?.trim() ?? '';
+    }
+
     // Si no tenemos un nombre de cliente temporal (porque es un checklist vacío nuevo),
     // le asignamos valores genéricos solo para que el PDF no explote al generar la vista previa.
     final registroTemporal = provider.crearRegistroTemporal(
@@ -15,8 +27,15 @@ class ChecklistScreen extends StatelessWidget {
       direccion: provider.direccionGuardada.isNotEmpty ? provider.direccionGuardada : 'Dirección pendiente',
     );
 
-    // Llamamos al servicio para mostrar el PDF
-    await PdfService.generarCertificado(registroTemporal);
+    // Llamamos al servicio para compartir el PDF con metadatos normativos
+    await PdfService.generarCertificado(
+      registroTemporal,
+      esquemaTierra: provider.esquemaTierra,
+      distribuidora: provider.distribuidora,
+      nombreTecnico: tecnico.isNotEmpty ? tecnico : 'Instalador Especialista en Electromovilidad',
+      registroSib: matricula.isNotEmpty ? matricula : null,
+      medicionTierraExterna: provider.medicionTierraExterna,
+    );
   }
 
   void _mostrarDialogoGuardar(BuildContext context, ChecklistProvider provider) {
@@ -36,35 +55,123 @@ class ChecklistScreen extends StatelessWidget {
     final provider = context.watch<ChecklistProvider>();
     final isReady = provider.isChecklistComplete;
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(context),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(left: 24.0, right: 24.0, bottom: 24.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildContextSection(context),
-                    const SizedBox(height: 24),
-                    _buildVisualInspectionTile(context, provider),
-                    const SizedBox(height: 16),
-                    _buildElectricalTestsTile(context, provider),
-                    const SizedBox(height: 16),
-                    _buildFinalTestsTile(context, provider),
-                    const SizedBox(height: 16),
-                    _buildDocumentationTile(context, provider),
-                    const SizedBox(height: 32),
-                    _buildActionButtons(context, provider, isReady),
-                  ],
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Scaffold(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(context),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.only(left: 24.0, right: 24.0, bottom: 24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildContextSection(context),
+                      const SizedBox(height: 16),
+                      _buildProgressCard(context, provider),
+                      const SizedBox(height: 20),
+                      _buildVisualInspectionTile(context, provider),
+                      const SizedBox(height: 16),
+                      _buildElectricalTestsTile(context, provider),
+                      const SizedBox(height: 16),
+                      _buildFinalTestsTile(context, provider),
+                      const SizedBox(height: 16),
+                      _buildDocumentationTile(context, provider),
+                      const SizedBox(height: 32),
+                      _buildActionButtons(context, provider, isReady),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildProgressCard(BuildContext context, ChecklistProvider provider) {
+    final completados = provider.itemsCompletadosCount;
+    final total = provider.totalItemsRequeridos;
+    final double progreso = provider.progresoPorcentaje;
+    final int porcentaje = (progreso * 100).toInt();
+    final bool isReady = provider.isChecklistComplete;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isReady
+            ? Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.25)
+            : Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isReady
+              ? Theme.of(context).colorScheme.secondary
+              : Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    isReady ? Icons.verified : Icons.rule,
+                    color: isReady ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.primary,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'AVANCE DE CONFORMIDAD NORMATIVA',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                      color: isReady ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                '$porcentaje%',
+                style: TextStyle(
+                  fontFamily: 'Space Grotesk',
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: isReady ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progreso,
+              minHeight: 8,
+              backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isReady ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '$completados de $total requisitos normativos completados ($porcentaje%)',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -103,7 +210,7 @@ class ChecklistScreen extends StatelessWidget {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
             ),
             icon: const Icon(Icons.picture_as_pdf),
-            label: const Text('PREVISUALIZAR ACTA (PDF)', style: TextStyle(fontFamily: 'Space Grotesk', fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+            label: const Text('COMPARTIR ACTA (PDF)', style: TextStyle(fontFamily: 'Space Grotesk', fontWeight: FontWeight.bold, letterSpacing: 1.0)),
           ),
         ),
       ],
@@ -126,47 +233,120 @@ class ChecklistScreen extends StatelessWidget {
 
   Widget _buildContextSection(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(top: 16.0),
+      padding: const EdgeInsets.only(top: 16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('PROTOCOLO ELECTROMOVILIDAD', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          Text('PROTOCOLO ELECTROMOVILIDAD — AETN Nº 479/2021', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           Text('Puesta en Marcha', style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 28, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
-          SizedBox(height: 8),
-          Text('Registra la instalación. Si sales de esta pantalla, tu borrador se guardará automáticamente.', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.secondary, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Text('Valida la instalación eléctrica y mecánica. Para emitir el certificado final, todos los puntos y la medición de tierra son obligatorios.', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.secondary, fontWeight: FontWeight.w600)),
         ],
       ),
     );
   }
 
-  // INSPECCION VISUAL 
+  // INSPECCION VISUAL Y MONTAJE
   Widget _buildVisualInspectionTile(BuildContext context, ChecklistProvider p) {
     return _buildCustomExpansionTile(
       context,
-      title: '1. Inspección Visual', icon: Icons.visibility, initiallyExpanded: true,
+      title: '1. Inspección Visual y Montaje (AETN 479/2021)', icon: Icons.visibility, initiallyExpanded: true,
       children: [
-        _buildCheckboxItem(context, value: p.visFijacion, title: 'Fijación firme del Wallbox', subtitle: 'Verificar que todos los tornillos de anclaje estén firmes.', onChanged: (v) { p.visFijacion = v ?? false; p.refresh(); }),
-        _buildCheckboxItem(context, value: p.visCables, title: 'Cables organizados', subtitle: 'Ruta continua, sin empalmes sueltos/aprentes.', onChanged: (v) { p.visCables = v ?? false; p.refresh(); }),
-        _buildCheckboxItem(context, value: p.visProteccion, title: 'Protección mecánica', subtitle: 'Conductores en ductos, cajas de paso o bandejas adecuadas.', onChanged: (v) { p.visProteccion = v ?? false; p.refresh(); }),
-        _buildCheckboxItem(context, value: p.visIdentificacion, title: 'Identificación', subtitle: 'Tablero claramente etiquetado con su disyuntor exclusivo.', onChanged: (v) { p.visIdentificacion = v ?? false; p.refresh(); }),
-        _buildCheckboxItem(context, value: p.visDanos, title: 'Ausencia de daños', subtitle: 'Equipos y cables sin daños físicos visibles.', onChanged: (v) { p.visDanos = v ?? false; p.refresh(); }),
+        _buildCheckboxItem(
+          context,
+          value: p.visFijacion,
+          title: 'Fijación firme y altura reglamentaria',
+          subtitle: 'Anclaje sólido y altura de conector/tótem entre 0.60 m y 1.30 m s.n.p.t. (AETN Art. 14).',
+          onChanged: (v) { p.visFijacion = v ?? false; p.refresh(); },
+        ),
+        _buildCheckboxItem(
+          context,
+          value: p.visDanos,
+          title: 'Envolvente y grado de protección (IP / IK)',
+          subtitle: 'Sin daños; envolvente mínima IP54 para intemperie o IP44 interior protegido (IK08).',
+          onChanged: (v) { p.visDanos = v ?? false; p.refresh(); },
+        ),
+        _buildCheckboxItem(
+          context,
+          value: p.visCables,
+          title: 'Canalización y recorrido de cables',
+          subtitle: 'Ruta continua protegida en ducto rígido/reforzado; sin cables en contacto con suelo.',
+          onChanged: (v) { p.visCables = v ?? false; p.refresh(); },
+        ),
+        _buildCheckboxItem(
+          context,
+          value: p.visProteccion,
+          title: 'Protección de personas: RCD Tipo A 30mA',
+          subtitle: 'Interruptor diferencial exclusivo Tipo A de 30mA con corte omnipolar (no Tipo AC).',
+          onChanged: (v) { p.visProteccion = v ?? false; p.refresh(); },
+        ),
+        _buildCheckboxItem(
+          context,
+          value: p.visIdentificacion,
+          title: 'Protección atmosférica y rotulado (SPD Clase II)',
+          subtitle: 'Tablero rotulado con disyuntor Curva C y protector de sobretensión SPD Clase II a tierra.',
+          onChanged: (v) { p.visIdentificacion = v ?? false; p.refresh(); },
+        ),
       ],
     );
   }
 
   // PRUEBAS ELECTRICAS 
   Widget _buildElectricalTestsTile(BuildContext context, ChecklistProvider p) {
+    // 1. Tensión reactiva
+    final tensionTexto = p.tensionController.text.trim().replaceAll(',', '.');
+    final double? parsedTension = double.tryParse(tensionTexto);
+    final bool hasTension = tensionTexto.isNotEmpty;
+    final bool isTensionSuccess = hasTension && parsedTension != null && parsedTension >= AppConstants.tensionMinimaOperativaV && parsedTension <= AppConstants.tensionMaximaOperativaV;
+    final bool isTensionError = hasTension && !isTensionSuccess;
+
+    Color colorTensionEstado = Theme.of(context).colorScheme.onSurface;
+    Color colorTensionBorde = Theme.of(context).colorScheme.outlineVariant;
+    Color colorTensionFocus = Theme.of(context).colorScheme.primary;
+
+    if (isTensionError) {
+      colorTensionEstado = Theme.of(context).colorScheme.error;
+      colorTensionBorde = Theme.of(context).colorScheme.error;
+      colorTensionFocus = Theme.of(context).colorScheme.error;
+    } else if (isTensionSuccess) {
+      colorTensionEstado = Theme.of(context).colorScheme.secondary;
+      colorTensionBorde = Theme.of(context).colorScheme.secondary;
+      colorTensionFocus = Theme.of(context).colorScheme.secondary;
+    }
+
+    Widget? suffixTensionWidget;
+    if (isTensionError) {
+      suffixTensionWidget = Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.warning, color: Theme.of(context).colorScheme.error, size: 20),
+          Text(
+            'Fuera de rango',
+            style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.error),
+          ),
+        ],
+      );
+    } else if (isTensionSuccess) {
+      suffixTensionWidget = Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.check_circle, color: Theme.of(context).colorScheme.secondary, size: 20),
+          Text(
+            'Conforme',
+            style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.secondary),
+          ),
+        ],
+      );
+    }
+
+    // 2. Resistencia de Puesta a Tierra (Obligatoria para certificar)
     final tierraTexto = p.tierraController.text.trim().replaceAll(',', '.');
     final double? parsedOhms = double.tryParse(tierraTexto);
     final bool hasTierra = tierraTexto.isNotEmpty;
 
-    // Tres estados visuales según requerimiento y NB 777:
-    // 1. ohms > 0 && ohms <= 10.0: Verde / Éxito (Óptimo)
-    // 2. ohms > 10.0 && ohms <= 25.0: Ámbar / Info (Aceptable residencial NB 777)
-    // 3. ohms > 25.0 o <= 0: Rojo / Error (Peligroso / No conforme)
-    final bool isSuccess = hasTierra && parsedOhms != null && parsedOhms > 0.0 && parsedOhms <= 10.0;
-    final bool isAceptable = hasTierra && parsedOhms != null && parsedOhms > 10.0 && parsedOhms <= 25.0;
-    final bool isError = hasTierra && (parsedOhms == null || parsedOhms <= 0.0 || parsedOhms > 25.0);
+    final bool isSuccess = hasTierra && parsedOhms != null && parsedOhms > 0.0 && parsedOhms <= AppConstants.resistenciaTierraOptimaOhms;
+    final bool isAceptable = hasTierra && parsedOhms != null && parsedOhms > AppConstants.resistenciaTierraOptimaOhms && parsedOhms <= AppConstants.resistenciaTierraMaximaOhms;
+    final bool isError = hasTierra && (parsedOhms == null || parsedOhms <= 0.0 || parsedOhms > AppConstants.resistenciaTierraMaximaOhms);
 
     Color colorEstado = Theme.of(context).colorScheme.onSurface;
     Color colorBorde = Theme.of(context).colorScheme.outlineVariant;
@@ -224,41 +404,140 @@ class ChecklistScreen extends StatelessWidget {
 
     return _buildCustomExpansionTile(
       context,
-      title: '2. Pruebas Eléctricas', icon: Icons.electrical_services,
+      title: '2. Pruebas Eléctricas y PAT (NB 777)', icon: Icons.electrical_services,
       children: [
         Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSimpleInput(context, 'Tensión en el punto (Multímetro)', p.tensionController, 'V', 'Ej: 230'),
+              Text('ESQUEMA DE CONEXIÓN A TIERRA (AETN Nº 479/2021)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.0, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: ChoiceChip(
+                      label: const SizedBox(
+                        width: double.infinity,
+                        child: Text(
+                          'TN-S (Red Dedicada)',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      selected: p.esquemaTierra == 'TN-S',
+                      showCheckmark: false,
+                      selectedColor: Theme.of(context).colorScheme.primary,
+                      labelStyle: TextStyle(
+                        color: p.esquemaTierra == 'TN-S'
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      onSelected: (val) {
+                        if (val) p.setEsquemaTierra('TN-S');
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ChoiceChip(
+                      label: const SizedBox(
+                        width: double.infinity,
+                        child: Text(
+                          'TT (Jabalina Local)',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      selected: p.esquemaTierra == 'TT',
+                      showCheckmark: false,
+                      selectedColor: Theme.of(context).colorScheme.primary,
+                      labelStyle: TextStyle(
+                        color: p.esquemaTierra == 'TT'
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      onSelected: (val) {
+                        if (val) p.setEsquemaTierra('TT');
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              Text('TENSIÓN DE RED OPERATIVA', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.0, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: p.tensionController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 24, fontWeight: FontWeight.bold, color: colorTensionEstado),
+                decoration: InputDecoration(
+                  hintText: 'Ej: 220',
+                  hintStyle: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.3)),
+                  suffixText: 'V',
+                  suffixStyle: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.surfaceContainerLowest,
+                  border: UnderlineInputBorder(borderSide: BorderSide(color: colorTensionBorde, width: 2)),
+                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: colorTensionBorde, width: 2)),
+                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: colorTensionFocus, width: 2)),
+                  suffixIcon: suffixTensionWidget,
+                ),
+              ),
               Padding(
-                padding: const EdgeInsets.only(left: 14, top: 4, bottom: 16), 
-                child: Text('Tensión nominal operativa (180V - 460V).', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant))
+                padding: const EdgeInsets.only(left: 4, top: 4, bottom: 16),
+                child: Text('Tensión nominal requerida entre 180V y 460V (Monofásica 220V, Delta 220V, Trifásica 380V).', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ),
               
-              Text('RESISTENCIA PUESTA A TIERRA', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.0, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              Text('RESISTENCIA PUESTA A TIERRA (OBLIGATORIA)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.0, color: Theme.of(context).colorScheme.onSurfaceVariant)),
               const SizedBox(height: 8),
               TextField(
                 controller: p.tierraController,
+                enabled: !p.medicionTierraExterna,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 24, fontWeight: FontWeight.bold, color: colorEstado),
                 decoration: InputDecoration(
-                  hintText: 'Ej: 5.4',
+                  hintText: p.medicionTierraExterna ? 'Delegada a externo' : 'Ej: 5.4',
                   hintStyle: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.3)), 
+                  suffixText: p.medicionTierraExterna ? null : 'Ω',
+                  suffixStyle: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
                   filled: true, 
                   fillColor: Theme.of(context).colorScheme.surfaceContainerLowest,
                   border: UnderlineInputBorder(borderSide: BorderSide(color: colorBorde, width: 2)),
                   enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: colorBorde, width: 2)),
                   focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: colorFocus, width: 2)),
-                  suffixIcon: suffixWidget ?? const SizedBox.shrink(),
+                  disabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant, width: 1)),
+                  suffixIcon: p.medicionTierraExterna ? null : suffixWidget,
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.only(left: 14, top: 8, bottom: 16), 
-                child: Text('Ideal < 10 Ω. Aceptable doméstico ≤ 25 Ω. Dejar en blanco si un tercero validará con telurómetro.', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant, fontStyle: FontStyle.italic))
+              CheckboxListTile(
+                title: const Text(
+                  'Medición delegada a especialista técnico (Constancia PAT adjunta)',
+                  style: TextStyle(fontSize: 12),
+                ),
+                value: p.medicionTierraExterna,
+                onChanged: (val) => p.setMedicionTierraExterna(val ?? false),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                dense: true,
               ),
-              _buildCheckboxItem(context, value: p.elecContinuidad, title: 'Continuidad', subtitle: 'Fase, Neutro y Tierra medidos.', onChanged: (v) { p.elecContinuidad = v ?? false; p.refresh(); }),
+              Padding(
+                padding: const EdgeInsets.only(left: 4, top: 4, bottom: 16), 
+                child: Text(
+                  p.medicionTierraExterna
+                      ? 'Medición de PAT delegada a especialista técnico. Requiere marcar la constancia PAT en la sección de Documentación.'
+                      : 'Requisito obligatorio ≤ 25 Ω (NB 777) para emitir el certificado final (Ideal < 10 Ω). Si se omite, solo se guardará como borrador.',
+                  style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant, fontStyle: FontStyle.italic),
+                ),
+              ),
+              _buildCheckboxItem(
+                context,
+                value: p.elecContinuidad,
+                title: 'Continuidad y equipotencialidad',
+                subtitle: 'Fase, Neutro y Tierra medidos con continuidad efectiva a la barra equipotencial.',
+                onChanged: (v) { p.elecContinuidad = v ?? false; p.refresh(); },
+              ),
             ],
           ),
         ),
@@ -270,39 +549,39 @@ class ChecklistScreen extends StatelessWidget {
   Widget _buildFinalTestsTile(BuildContext context, ChecklistProvider p) {
     return _buildCustomExpansionTile(
       context,
-      title: '3. Pruebas Finales', icon: Icons.power_settings_new,
+      title: '3. Pruebas Finales y Operación con EV', icon: Icons.power_settings_new,
       children: [
-        _buildCheckboxItem(context, value: p.funEncendido, title: 'Encendido Wallbox', subtitle: 'Verificar LEDs / pantalla activa sin errores.', onChanged: (v) { p.funEncendido = v ?? false; p.refresh(); }),
-        _buildCheckboxItem(context, value: p.funCorriente, title: 'Corriente real de carga', subtitle: 'Conectar EV y verificar corriente con pinza.', onChanged: (v) { p.funCorriente = v ?? false; p.refresh(); }),
-        _buildCheckboxItem(context, value: p.funTemperatura, title: 'Temperatura de cables', subtitle: 'Sin calentamiento (>60°C) excesivo en bornes tras 30 mins.', onChanged: (v) { p.funTemperatura = v ?? false; p.refresh(); }),
-        _buildCheckboxItem(context, value: p.funEmergencia, title: 'Parada de emergencia', subtitle: 'Botón de parada probado y efectivo (Si aplica).', onChanged: (v) { p.funEmergencia = v ?? false; p.refresh(); }),
+        _buildCheckboxItem(context, value: p.funEncendido, title: 'Encendido Wallbox', subtitle: 'Verificar LEDs / pantalla activa sin errores de comunicación.', onChanged: (v) { p.funEncendido = v ?? false; p.refresh(); }),
+        _buildCheckboxItem(context, value: p.funCorriente, title: 'Corriente real de carga', subtitle: 'Conectar EV y verificar corriente real con pinza amperimétrica.', onChanged: (v) { p.funCorriente = v ?? false; p.refresh(); }),
+        _buildCheckboxItem(context, value: p.funTemperatura, title: 'Control térmico en bornes', subtitle: 'Sin calentamiento excesivo (≤ 60°C) en bornes tras prueba de carga continua.', onChanged: (v) { p.funTemperatura = v ?? false; p.refresh(); }),
+        _buildCheckboxItem(context, value: p.funEmergencia, title: 'Parada de emergencia', subtitle: 'Pulsador de parada probado y efectivo (si aplica).', onChanged: (v) { p.funEmergencia = v ?? false; p.refresh(); }),
       ],
     );
   }
 
-  // DOCUMENTACIOPN FINAL 
+  // DOCUMENTACION FINAL 
   Widget _buildDocumentationTile(BuildContext context, ChecklistProvider p) {
     return _buildCustomExpansionTile( 
       context,
-      title: '4. Documentación y Entrega', icon: Icons.folder_special,
+      title: '4. Documentación y Entrega Técnica', icon: Icons.folder_special,
       children: [
         Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
-              _buildDocButton(context, text: 'Registro fotográfico (Equipo y Tablero)', isCompleted: p.docFoto, onTap: () { p.docFoto = !p.docFoto; p.refresh(); }),
+              _buildDocButton(context, text: 'Registro fotográfico (Equipo, Tablero y PAT)', isCompleted: p.docFoto, onTap: () { p.docFoto = !p.docFoto; p.refresh(); }),
               const SizedBox(height: 8),
-              _buildDocButton(context, text: 'Diagrama unifilar del circuito', isCompleted: p.docDiagrama, onTap: () { p.docDiagrama = !p.docDiagrama; p.refresh(); }),
+              _buildDocButton(context, text: 'Diagrama unifilar del circuito terminal dedicado', isCompleted: p.docDiagrama, onTap: () { p.docDiagrama = !p.docDiagrama; p.refresh(); }),
               const SizedBox(height: 8),
-              _buildDocButton(context, text: 'Certificado de medición de puesta a tierra', isCompleted: p.docCertificado, onTap: () { p.docCertificado = !p.docCertificado; p.refresh(); }),
+              _buildDocButton(context, text: 'Constancia o certificado de medición de puesta a tierra (PAT)', isCompleted: p.docCertificado, onTap: () { p.docCertificado = !p.docCertificado; p.refresh(); }),
               const SizedBox(height: 8),
-              _buildDocButton(context, text: 'Manual de equipo entregado al cliente', isCompleted: p.docManual, onTap: () { p.docManual = !p.docManual; p.refresh(); }),
+              _buildDocButton(context, text: 'Manual de usuario y mantenimiento entregado al cliente', isCompleted: p.docManual, onTap: () { p.docManual = !p.docManual; p.refresh(); }),
             ],
           ),
         ),
         Padding(
           padding: const EdgeInsets.only(left: 24.0, right: 24.0, bottom: 16.0),
-          child: Text('Nota: Orientar al cliente sobre uso y mantenimiento preventivo tras firmar.', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.secondary, fontStyle: FontStyle.italic)),
+          child: Text('Nota: Orientar al cliente sobre uso seguro, protocolos de desconexión y mantenimiento preventivo.', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.secondary, fontStyle: FontStyle.italic)),
         )
       ],
     );
@@ -314,36 +593,6 @@ class ChecklistScreen extends StatelessWidget {
       title: Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: value ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface)),
       subtitle: Text(subtitle, style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
       controlAffinity: ListTileControlAffinity.leading, contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0), dense: true,
-    );
-  }
-
-  Widget _buildSimpleInput(BuildContext context, String label, TextEditingController controller, String suffix, String hint) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerLowest, border: Border(left: BorderSide(color: Theme.of(context).colorScheme.primaryContainer, width: 2))),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic,
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: controller, 
-                  keyboardType: TextInputType.numberWithOptions(decimal: true), 
-                  style: TextStyle(
-                    fontFamily: 'Space Grotesk', 
-                    fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface
-                  ), 
-                  decoration: InputDecoration(hintText: hint, hintStyle: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.3)), 
-                  border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.zero)),
-              ),
-              Text(suffix, style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            ],
-          )
-        ],
-      ),
     );
   }
 
@@ -416,6 +665,13 @@ class _DialogoGuardarRegistroState extends State<_DialogoGuardarRegistro> {
   late final TextEditingController _nombreController;
   late final TextEditingController _ciController;
   late final TextEditingController _direccionController;
+  late final TextEditingController _tecnicoController;
+  late final TextEditingController _matriculaController;
+  late String _distribuidoraSeleccionada;
+  late String _esquemaSeleccionado;
+
+  final List<String> _distribuidorasDisponibles = ['ELFEC', 'DELAPAZ', 'CRE', 'ENDE', 'OTRO'];
+  final List<String> _esquemasDisponibles = ['TN-S', 'TT'];
 
   @override
   void initState() {
@@ -424,6 +680,31 @@ class _DialogoGuardarRegistroState extends State<_DialogoGuardarRegistro> {
     _nombreController = TextEditingController(text: isEditing ? widget.provider.nombreClienteGuardado : '');
     _ciController = TextEditingController(text: isEditing ? widget.provider.ciNitClienteGuardado : '');
     _direccionController = TextEditingController(text: isEditing ? widget.provider.direccionGuardada : '');
+    _tecnicoController = TextEditingController(text: widget.provider.tecnicoResponsable);
+    _matriculaController = TextEditingController(text: widget.provider.matriculaProfesional);
+    _distribuidoraSeleccionada = widget.provider.distribuidora;
+    _esquemaSeleccionado = widget.provider.esquemaTierra;
+
+    _cargarDatosTecnicoPersistidos();
+  }
+
+  Future<void> _cargarDatosTecnicoPersistidos() async {
+    final prefs = await SharedPreferences.getInstance();
+    final nombreGuardado = prefs.getString('cfg_nombre_tecnico');
+    final sibGuardado = prefs.getString('cfg_registro_sib');
+
+    if (mounted) {
+      if (_tecnicoController.text.trim().isEmpty && nombreGuardado != null && nombreGuardado.trim().isNotEmpty) {
+        setState(() {
+          _tecnicoController.text = nombreGuardado.trim();
+        });
+      }
+      if (_matriculaController.text.trim().isEmpty && sibGuardado != null && sibGuardado.trim().isNotEmpty) {
+        setState(() {
+          _matriculaController.text = sibGuardado.trim();
+        });
+      }
+    }
   }
 
   @override
@@ -431,6 +712,8 @@ class _DialogoGuardarRegistroState extends State<_DialogoGuardarRegistro> {
     _nombreController.dispose();
     _ciController.dispose();
     _direccionController.dispose();
+    _tecnicoController.dispose();
+    _matriculaController.dispose();
     super.dispose();
   }
 
@@ -448,7 +731,7 @@ class _DialogoGuardarRegistroState extends State<_DialogoGuardarRegistro> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              isReady ? 'Certificar Entrega' : (isEditing ? 'Actualizar Borrador' : 'Guardar Registro'), 
+              isReady ? 'Certificar Entrega (AETN 479)' : (isEditing ? 'Actualizar Borrador' : 'Guardar Borrador'), 
               style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 18, fontWeight: FontWeight.bold, color: isReady ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.primary)
             ),
           ),
@@ -461,8 +744,8 @@ class _DialogoGuardarRegistroState extends State<_DialogoGuardarRegistro> {
           children: [
             Text(
               isReady 
-                ? 'La instalación cumple con todas las normativas. Ingresa los datos del cliente.'
-                : 'Faltan datos o pruebas. El registro se guardará como pendiente en tu Historial.',
+                ? 'La instalación cumple con la Resolución AETN Nº 479/2021 y NB 777. Completa los datos para el acta formal.'
+                : 'Faltan datos o mediciones de puesta a tierra. El registro se guardará como borrador pendiente.',
               style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 16),
@@ -499,6 +782,62 @@ class _DialogoGuardarRegistroState extends State<_DialogoGuardarRegistro> {
                 isDense: true,
               ),
             ),
+            const SizedBox(height: 12),
+
+            // Distribuidora eléctrica
+            DropdownButtonFormField<String>(
+              value: _distribuidoraSeleccionada,
+              decoration: InputDecoration(
+                labelText: 'Empresa Distribuidora Eléctrica',
+                labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: _distribuidorasDisponibles.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
+              onChanged: (val) {
+                if (val != null) setState(() => _distribuidoraSeleccionada = val);
+              },
+            ),
+            const SizedBox(height: 12),
+
+            // Esquema de Tierra
+            DropdownButtonFormField<String>(
+              value: _esquemaSeleccionado,
+              decoration: InputDecoration(
+                labelText: 'Esquema de Tierra (PAT)',
+                labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: _esquemasDisponibles.map((e) => DropdownMenuItem(value: e, child: Text(e == 'TN-S' ? 'TN-S (Neutro y Tierra separados)' : 'TT (Tierra local y RCD)'))).toList(),
+              onChanged: (val) {
+                if (val != null) setState(() => _esquemaSeleccionado = val);
+              },
+            ),
+            const SizedBox(height: 12),
+
+            // Técnico responsable
+            TextField(
+              controller: _tecnicoController,
+              decoration: InputDecoration(
+                labelText: 'Nombre del Técnico / Empresa Instaladora (Opcional)',
+                labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Matrícula profesional
+            TextField(
+              controller: _matriculaController,
+              decoration: InputDecoration(
+                labelText: 'Matrícula Profesional / Registro SIB (Opcional)',
+                labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
           ],
         ),
       ),
@@ -519,6 +858,23 @@ class _DialogoGuardarRegistroState extends State<_DialogoGuardarRegistro> {
               return;
             }
 
+            // Sincronizamos y persistimos datos del instalador en SharedPreferences
+            final prefs = await SharedPreferences.getInstance();
+            final tecnicoStr = _tecnicoController.text.trim();
+            final matriculaStr = _matriculaController.text.trim();
+            if (tecnicoStr.isNotEmpty) {
+              await prefs.setString('cfg_nombre_tecnico', tecnicoStr);
+            }
+            if (matriculaStr.isNotEmpty) {
+              await prefs.setString('cfg_registro_sib', matriculaStr);
+            }
+
+            // Sincronizamos metadatos normativos en el Provider
+            widget.provider.distribuidora = _distribuidoraSeleccionada;
+            widget.provider.esquemaTierra = _esquemaSeleccionado;
+            widget.provider.tecnicoResponsable = tecnicoStr;
+            widget.provider.matriculaProfesional = matriculaStr;
+
             await provider.guardarRegistroFinal(
               nombreCliente: _nombreController.text.trim(), 
               ciNitCliente: _ciController.text.trim(),
@@ -529,7 +885,7 @@ class _DialogoGuardarRegistroState extends State<_DialogoGuardarRegistro> {
               Navigator.pop(context); 
               ScaffoldMessenger.of(widget.parentContext).showSnackBar(
                 SnackBar(
-                  content: Text(isReady ? 'Certificado guardado correctamente.' : '💾 Registro guardado en BD como pendiente.'), 
+                  content: Text(isReady ? 'Certificado emitido y guardado correctamente.' : '💾 Registro guardado en BD como borrador.'), 
                   backgroundColor: isReady ? Theme.of(context).colorScheme.secondary : Theme.of(context).colorScheme.primary,
                   behavior: SnackBarBehavior.floating,
                 )

@@ -183,11 +183,11 @@ class _CommercialScreenState extends State<CommercialScreen> {
           child: Column(
             children: [
               _buildHeader(),
-              _buildModuleHeaderAndTabs(),
+              _buildTabSelector(),
               
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.only(left: 24.0, right: 24.0, bottom: 100.0),
+                  padding: const EdgeInsets.only(left: 24.0, right: 24.0, top: 4.0, bottom: 100.0),
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
                     child: _currentTabIndex == 0 
@@ -233,27 +233,22 @@ class _CommercialScreenState extends State<CommercialScreen> {
     );
   }
 
-  Widget _buildModuleHeaderAndTabs() {
+  Widget _buildTabSelector() {
     return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Comercial', style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 28, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
-          Text('COTIZADOR Y RETORNO DE INVERSIÓN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 16),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerLow, borderRadius: BorderRadius.circular(8)),
-            child: Row(
-              children: [
-                Expanded(child: _buildTabButton('Comparativa', 0)),
-                Expanded(child: _buildTabButton('Presupuesto', 1)),
-              ],
-            ),
-          )
-        ],
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Expanded(child: _buildTabButton('Comparativa', 0)),
+            Expanded(child: _buildTabButton('Presupuesto', 1)),
+          ],
+        ),
       ),
     );
   }
@@ -264,7 +259,7 @@ class _CommercialScreenState extends State<CommercialScreen> {
       onTap: () => setState(() => _currentTabIndex = index),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: isActive ? Theme.of(context).colorScheme.primaryContainer : Colors.transparent,
@@ -284,6 +279,9 @@ class _CommercialScreenState extends State<CommercialScreen> {
 
   // PESTAÑA 1: CALCULADORA DE AHORRO 
   Widget _buildAhorroTab() {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color gnvColor = isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309);
+
     // 1. Lectura de variables sanitizadas
     final double bateriaKwh = double.tryParse(_batteryController.text.trim().replaceAll(',', '.')) ?? 0.0;
     final double potenciaCargadorKw = double.tryParse(_chargerPowerController.text.trim().replaceAll(',', '.')) ?? 0.0;
@@ -304,9 +302,21 @@ class _CommercialScreenState extends State<CommercialScreen> {
     final double m3GnvNecesarios = esDatoValido ? autonomiaKm / AppConstants.consumoGnvKmPorM3 : 0.0;
     final double costoTanqueGnv = esDatoValido ? m3GnvNecesarios * _precioGnv : 0.0;
 
-    // 4. Ahorro Anual (Proyección a 15,000 km)
+    // 4. Ahorro Anual y Mensual (Proyección a 15,000 km)
     final double ahorroAnual = esDatoValido
         ? ((15000 / AppConstants.consumoGasolinaKmPorL * _precioGasolina) - (15000 * AppConstants.consumoEvKwhPorKm * _precioKwh))
+        : 0.0;
+    final double ahorroMensualVsGasolina = ahorroAnual > 0 ? (ahorroAnual / 12) : 0.0;
+
+    // 5. Total presupuestado desde la pestaña Presupuesto para cálculo de amortización
+    final double metros = double.tryParse(_metrosController.text.trim().replaceAll(',', '.')) ?? 0.0;
+    final double precioPorMetro = double.tryParse(_precioMetroController.text.trim().replaceAll(',', '.')) ?? 0.0;
+    final double protecciones = double.tryParse(_proteccionesController.text.trim().replaceAll(',', '.')) ?? 0.0;
+    final double manoObra = double.tryParse(_manoObraController.text.trim().replaceAll(',', '.')) ?? 0.0;
+    final double totalEstimadoPresupuesto = (metros * precioPorMetro) + protecciones + manoObra;
+
+    final double tiempoRetornoMeses = (ahorroMensualVsGasolina > 0 && totalEstimadoPresupuesto > 0)
+        ? (totalEstimadoPresupuesto / ahorroMensualVsGasolina)
         : 0.0;
 
     // Referencia para la barra de progreso (El más caro es el 100%)
@@ -339,7 +349,7 @@ class _CommercialScreenState extends State<CommercialScreen> {
                         Row(
                           children: [
                             Text('Batería del EV', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                            SizedBox(width: 4),
+                            const SizedBox(width: 4),
                             Icon(Icons.edit, size: 10, color: Theme.of(context).colorScheme.outline),
                           ],
                         ),
@@ -381,7 +391,7 @@ class _CommercialScreenState extends State<CommercialScreen> {
                         Row(
                           children: [
                             Text('Potencia de Carga', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                            SizedBox(width: 4),
+                            const SizedBox(width: 4),
                             Icon(Icons.edit, size: 10, color: Theme.of(context).colorScheme.outline),
                           ],
                         ),
@@ -416,7 +426,7 @@ class _CommercialScreenState extends State<CommercialScreen> {
                   ),
                 ],
               ),
-              Padding(padding: EdgeInsets.symmetric(vertical: 16.0), child: Divider(color: Theme.of(context).colorScheme.outlineVariant)),
+              Padding(padding: const EdgeInsets.symmetric(vertical: 16.0), child: Divider(color: Theme.of(context).colorScheme.outlineVariant)),
               
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -476,18 +486,36 @@ class _CommercialScreenState extends State<CommercialScreen> {
               ),
               const SizedBox(height: 24),
               
-              _buildProgressRow('Carga EV Completa', 'Bs ${costoTanqueEv.toStringAsFixed(2)}', Icons.battery_charging_full, Theme.of(context).colorScheme.secondary, maxCost > 0 ? costoTanqueEv / maxCost : 0),
+              _buildProgressRow(
+                'Carga EV Completa',
+                esDatoValido ? 'Bs ${costoTanqueEv.toStringAsFixed(2)}' : '--',
+                Icons.battery_charging_full,
+                Theme.of(context).colorScheme.secondary,
+                (esDatoValido && maxCost > 0) ? costoTanqueEv / maxCost : 0,
+              ),
               const SizedBox(height: 16),
-              _buildProgressRow('Equivalente en GNV', 'Bs ${costoTanqueGnv.toStringAsFixed(2)}', Icons.gas_meter, const Color(0xFFFFD600), maxCost > 0 ? costoTanqueGnv / maxCost : 0),
+              _buildProgressRow(
+                'Equivalente en GNV',
+                esDatoValido ? 'Bs ${costoTanqueGnv.toStringAsFixed(2)}' : '--',
+                Icons.gas_meter,
+                gnvColor,
+                (esDatoValido && maxCost > 0) ? costoTanqueGnv / maxCost : 0,
+              ),
               const SizedBox(height: 16),
-              _buildProgressRow('Equivalente en Gasolina', 'Bs ${costoTanqueGasolina.toStringAsFixed(2)}', Icons.local_gas_station, const Color(0xFFFF1744), maxCost > 0 ? costoTanqueGasolina / maxCost : 0),
+              _buildProgressRow(
+                'Equivalente en Gasolina',
+                esDatoValido ? 'Bs ${costoTanqueGasolina.toStringAsFixed(2)}' : '--',
+                Icons.local_gas_station,
+                const Color(0xFFFF1744),
+                (esDatoValido && maxCost > 0) ? costoTanqueGasolina / maxCost : 0,
+              ),
               
-              Padding(padding: EdgeInsets.symmetric(vertical: 24.0), child: Divider(color: Theme.of(context).colorScheme.outlineVariant)),
+              Padding(padding: const EdgeInsets.symmetric(vertical: 24.0), child: Divider(color: Theme.of(context).colorScheme.outlineVariant)),
               
               Row(
                 children: [
                   Container(
-                    padding: EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
                     child: Icon(Icons.savings, color: Theme.of(context).colorScheme.secondary, size: 32),
                   ),
@@ -497,12 +525,74 @@ class _CommercialScreenState extends State<CommercialScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('AHORRO ESTIMADO ANUAL (15,000 km)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.0, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                        Text('Bs ${ahorroAnual.toStringAsFixed(2)}', style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.secondary)),
+                        Text(esDatoValido ? 'Bs ${ahorroAnual.toStringAsFixed(2)}' : '--', style: TextStyle(fontFamily: 'Space Grotesk', fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.secondary)),
                       ],
                     ),
                   )
                 ],
               )
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // TARJETA DE RETORNO DE INVERSIÓN (PAYBACK / ROI)
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.3),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.trending_up,
+                    color: Theme.of(context).colorScheme.secondary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Retorno de Inversión Estimado',
+                    style: TextStyle(
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                (esDatoValido && tiempoRetornoMeses > 0)
+                    ? 'Tu instalación se paga sola en ${tiempoRetornoMeses.toStringAsFixed(1)} meses'
+                    : 'Tu instalación se paga sola en -- meses',
+                style: TextStyle(
+                  fontFamily: 'Space Grotesk',
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.secondary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                (esDatoValido && tiempoRetornoMeses > 0)
+                    ? 'Con un ahorro proyectado de Bs ${ahorroMensualVsGasolina.toStringAsFixed(2)} al mes frente a la gasolina, recuperas el costo total de la obra (Bs ${totalEstimadoPresupuesto.toStringAsFixed(2)}) en menos de ${tiempoRetornoMeses.ceil()} meses de uso continuo.'
+                    : 'Ingresa la batería del vehículo y potencia de carga para proyectar la amortización en base al presupuesto actual de Bs ${totalEstimadoPresupuesto.toStringAsFixed(2)}.',
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.4,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
             ],
           ),
         ),
@@ -943,6 +1033,9 @@ class _DialogoEdicionTarifasState extends State<_DialogoEdicionTarifas> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color gnvColor = isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309);
+
     return AlertDialog(
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       title: Text('Precios Unitarios', style: TextStyle(fontFamily: 'Space Grotesk', color: Theme.of(context).colorScheme.primary)),
@@ -964,7 +1057,7 @@ class _DialogoEdicionTarifasState extends State<_DialogoEdicionTarifas> {
           TextField(
             controller: _gnvCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'GNV (Bs / m³)', labelStyle: TextStyle(color: Color(0xFFFFD600))),
+            decoration: InputDecoration(labelText: 'GNV (Bs / m³)', labelStyle: TextStyle(color: gnvColor)),
           ),
         ],
       ),
@@ -975,9 +1068,9 @@ class _DialogoEdicionTarifasState extends State<_DialogoEdicionTarifas> {
         ),
         ElevatedButton(
           onPressed: () {
-            final nuevoKwh = double.tryParse(_kwhCtrl.text.replaceAll(',', '.')) ?? widget.precioKwh;
-            final nuevoGnv = double.tryParse(_gnvCtrl.text.replaceAll(',', '.')) ?? widget.precioGnv;
-            final nuevoGas = double.tryParse(_gasCtrl.text.replaceAll(',', '.')) ?? widget.precioGasolina;
+            final nuevoKwh = double.tryParse(_kwhCtrl.text.trim().replaceAll(',', '.')) ?? widget.precioKwh;
+            final nuevoGnv = double.tryParse(_gnvCtrl.text.trim().replaceAll(',', '.')) ?? widget.precioGnv;
+            final nuevoGas = double.tryParse(_gasCtrl.text.trim().replaceAll(',', '.')) ?? widget.precioGasolina;
             widget.onGuardar(nuevoKwh, nuevoGnv, nuevoGas);
             Navigator.pop(context);
           },

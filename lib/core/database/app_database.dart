@@ -60,7 +60,8 @@ class CertificacionesChecklist extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get instalacionId => integer().references(Instalaciones, #id)();
   
-  // Datos del Cliente
+  // Datos del Cliente (Nota: Datos del técnico instalador se persisten globalmente
+  // en SharedPreferences vía cfg_nombre_tecnico y cfg_registro_sib para evitar alterar el esquema)
   TextColumn get nombreCliente => text()();
   TextColumn get ciNitCliente => text()();
   TextColumn get direccionInstalacion => text().withDefault(const Constant('Cochabamba, Bolivia'))();
