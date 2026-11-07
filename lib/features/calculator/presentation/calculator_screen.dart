@@ -21,6 +21,30 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
 
   final TextEditingController _potenciaController = TextEditingController();
   final TextEditingController _distanciaController = TextEditingController();
+  bool _argumentsLoaded = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_argumentsLoaded) {
+      _argumentsLoaded = true;
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Map<String, dynamic>) {
+        if (args.containsKey('potenciaKw')) {
+          final p = args['potenciaKw'];
+          if (p is num) {
+            _potenciaController.text = p % 1 == 0 ? p.toInt().toString() : p.toString();
+          }
+        }
+        if (args.containsKey('tipoRed')) {
+          final r = args['tipoRed'];
+          if (r is int && r >= 0 && r <= 2) {
+            _selectedNetworkIndex = r;
+          }
+        }
+      }
+    }
+  }
 
   @override
   void dispose() {

@@ -39,6 +39,30 @@ class _CommercialScreenState extends State<CommercialScreen> {
   final TextEditingController _spdCtrl = TextEditingController(text: '140.00');
   final TextEditingController _ovpCtrl = TextEditingController(text: '85.00');
   final TextEditingController _patCtrl = TextEditingController(text: '85.00');
+  bool _argumentsLoaded = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_argumentsLoaded) {
+      _argumentsLoaded = true;
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Map<String, dynamic>) {
+        if (args.containsKey('potenciaKw')) {
+          final p = args['potenciaKw'];
+          if (p is num) {
+            _chargerPowerController.text = p % 1 == 0 ? p.toInt().toString() : p.toString();
+          }
+        }
+        if (args.containsKey('bateriaKwh')) {
+          final b = args['bateriaKwh'];
+          if (b is num) {
+            _batteryController.text = b % 1 == 0 ? b.toInt().toString() : b.toString();
+          }
+        }
+      }
+    }
+  }
   
   @override
   void initState() {
